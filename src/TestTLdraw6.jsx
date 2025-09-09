@@ -650,11 +650,16 @@ function SaveCanvasButton({ editor }) {
       // 导出画布状态（包含完整的图片数据）
       const canvasData = editor.store.getSnapshot();
       
+      // 获取当前页面ID
+      const currentPageId = editor.getCurrentPageId();
+      console.log('保存时的当前页面ID:', currentPageId);
+      
       // 创建保存文件的内容
       const saveData = {
         version: '1.0',
         savedAt: new Date().toISOString(),
         canvasData: canvasData,
+        currentPageId: currentPageId, // 保存当前页面ID
         imageInfo: imageInfo,
         totalImages: imageInfo.length
       };
@@ -796,7 +801,49 @@ function LoadCanvasButton({ editor, setIsLoading }) {
             localStorage.setItem('currentImageIds', JSON.stringify(currentImageIds));
           }
           
-          // 5. 加载完成，组件将自动重新渲染
+          // 5. 恢复保存的页面状态
+          if (saveData.currentPageId) {
+            try {
+              console.log('尝试恢复到页面:', saveData.currentPageId);
+              
+              // 检查页面是否存在
+              const allPages = editor.getPages();
+              const targetPage = allPages.find(page => page.id === saveData.currentPageId);
+              console.log('目标页面是否存在:', !!targetPage);
+              
+              if (targetPage) {
+                // 等待一下确保画布完全加载
+                setTimeout(() => {
+                  try {
+                    editor.setCurrentPage(saveData.currentPageId);
+                    console.log('已恢复到页面:', saveData.currentPageId);
+                    
+                    // 验证是否真的切换了
+                    setTimeout(() => {
+                      const newCurrentPage = editor.getCurrentPage();
+                      console.log('切换后的当前页面:', newCurrentPage.name, newCurrentPage.id);
+                      
+                      // 强制刷新UI
+                      editor.updateViewportPageBounds();
+                      console.log('已强制刷新UI');
+                    }, 50);
+                  } catch (error) {
+                    console.warn('恢复页面状态时出错:', error);
+                    console.log('错误详情:', error.message);
+                  }
+                }, 200); // 增加等待时间
+              } else {
+                console.warn('目标页面不存在:', saveData.currentPageId);
+              }
+            } catch (error) {
+              console.warn('恢复页面状态时出错:', error);
+              console.log('错误详情:', error.message);
+            }
+          } else {
+            console.log('保存数据中没有currentPageId');
+          }
+          
+          // 6. 加载完成，组件将自动重新渲染
           // 移除加载提示
           document.body.removeChild(loadingMessage);
           
