@@ -1,6 +1,6 @@
 # 贡献指南 (Contributing Guide)
 
-感谢您对麦卡伦推广演示项目的关注！我们欢迎所有形式的贡献，包括但不限于：
+感谢您对交互式画布演示项目的关注！我们欢迎所有形式的贡献，包括但不限于：
 
 - 🐛 报告Bug
 - ✨ 提出新功能建议
@@ -15,11 +15,11 @@
 ```bash
 # Fork 项目到您的 GitHub 账户
 # 然后 clone 您的 fork
-git clone https://github.com/YOUR_USERNAME/mcallan_demo.git
-cd mcallan_demo
+git clone https://github.com/YOUR_USERNAME/canvas_demo.git
+cd canvas_demo
 
 # 添加原始仓库作为上游
-git remote add upstream https://github.com/ORIGINAL_OWNER/mcallan_demo.git
+git remote add upstream https://github.com/ORIGINAL_OWNER/canvas_demo.git
 ```
 
 ### 2. 安装依赖

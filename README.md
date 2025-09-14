@@ -1,6 +1,6 @@
-# 麦卡伦推广演示项目 (Macallan Promo Demo)
+# 交互式画布演示项目 (Interactive Canvas Demo)
 
-一个基于React + Vite + Tldraw的交互式画布应用，用于创建和编辑麦卡伦威士忌推广内容。
+一个基于React + Vite + Tldraw的交互式画布应用，用于创建和编辑各种推广内容。
 
 ## 项目特性
 
@@ -8,7 +8,7 @@
 - 📱 **响应式设计**: 适配不同设备和屏幕尺寸
 - 🖼️ **图像处理**: 支持图像上传、编辑和导出
 - 📄 **PDF导出**: 将画布内容导出为PDF格式
-- 🎯 **产品展示**: 专门为麦卡伦威士忌产品推广设计
+- 🎯 **产品展示**: 支持各种产品推广设计
 
 ## 技术栈
 
@@ -128,7 +128,7 @@ npm run lint
 npm install -g pm2
 
 # 启动应用
-pm2 start server.js --name mcallan-demo
+pm2 start server.js --name canvas-demo
 ```
 
 ## 贡献指南
