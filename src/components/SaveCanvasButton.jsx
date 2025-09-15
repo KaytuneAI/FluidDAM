@@ -1,6 +1,7 @@
 import React from "react";
 import { getSnapshot } from "tldraw";
 import { downloadJSON, showDownloadNotification } from '../utils/downloadUtils.js';
+import { getImageData } from '../utils/apiUtils.js';
 
 export default function SaveCanvasButton({ editor }) {
   const saveCanvas = async () => {
@@ -21,18 +22,16 @@ export default function SaveCanvasButton({ editor }) {
           // 直接从shape中获取图片信息
           const assetId = shape.props.assetId;
           
-          // 尝试从后端API获取文件名
+          // 尝试从后端API或localStorage获取文件名
           let fileName = `image_${shape.id}`;
           try {
-            const response = await fetch('http://localhost:3001/api/get-image-data');
-            const database = await response.json();
-            
+            const database = await getImageData();
             const imageData = database.images.find(img => img.id === shape.id);
             if (imageData) {
               fileName = imageData.fileName;
             }
           } catch {
-            // 无法从API获取文件名，使用默认名称
+            // 使用默认名称
           }
           
           imageInfo.push({

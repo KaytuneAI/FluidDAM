@@ -7,13 +7,11 @@ export function getApiBaseUrl() {
     return 'http://localhost:3001';
   }
   
-  // 在生产环境中，尝试使用当前域名
-  // 如果您的后端API部署在不同的端口或子域名，请修改这里
+  // 生产环境：自动使用当前IP地址的3001端口
   const protocol = window.location.protocol;
   const hostname = window.location.hostname;
   
-  // 假设API服务器运行在同一个域名的3001端口
-  // 您可能需要根据实际部署情况调整这个逻辑
+  // API服务器始终在同一个IP地址的3001端口
   return `${protocol}//${hostname}:3001`;
 }
 
