@@ -1,0 +1,121 @@
+// API工具函数 - 处理云端部署时的API端点问题
+
+// 动态获取API基础URL
+export function getApiBaseUrl() {
+  // 在开发环境中使用localhost
+  if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+    return 'http://localhost:3001';
+  }
+  
+  // 在生产环境中，尝试使用当前域名
+  // 如果您的后端API部署在不同的端口或子域名，请修改这里
+  const protocol = window.location.protocol;
+  const hostname = window.location.hostname;
+  
+  // 假设API服务器运行在同一个域名的3001端口
+  // 您可能需要根据实际部署情况调整这个逻辑
+  return `${protocol}//${hostname}:3001`;
+}
+
+// 检查API是否可用
+export async function checkApiAvailability() {
+  try {
+    const apiBaseUrl = getApiBaseUrl();
+    if (!apiBaseUrl) return false;
+    
+    const response = await fetch(`${apiBaseUrl}/api/get-image-data`, {
+      method: 'GET',
+      timeout: 3000 // 3秒超时
+    });
+    return response.ok;
+  } catch (error) {
+    return false;
+  }
+}
+
+// 保存图片数据到API
+export async function saveImageDataToApi(imageData) {
+  try {
+    const apiBaseUrl = getApiBaseUrl();
+    if (!apiBaseUrl) {
+      throw new Error('API base URL not available');
+    }
+    
+    const response = await fetch(`${apiBaseUrl}/api/save-image-data`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(imageData)
+    });
+    
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    
+    return await response.json();
+  } catch (error) {
+    throw error;
+  }
+}
+
+// 从API获取图片数据
+export async function getImageDataFromApi() {
+  try {
+    const apiBaseUrl = getApiBaseUrl();
+    if (!apiBaseUrl) {
+      throw new Error('API base URL not available');
+    }
+    
+    const response = await fetch(`${apiBaseUrl}/api/get-image-data`, {
+      method: 'GET'
+    });
+    
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    
+    return await response.json();
+  } catch (error) {
+    throw error;
+  }
+}
+
+// 保存图片数据（带fallback到localStorage）
+export async function saveImageData(imageData) {
+  try {
+    // 首先尝试使用API
+    const result = await saveImageDataToApi(imageData);
+    return result;
+  } catch (apiError) {
+    // API失败，回退到localStorage
+    console.warn('API保存失败，回退到localStorage:', apiError);
+    
+    const savedData = localStorage.getItem('imagesDatabase') || '{"images":[],"lastUpdated":"","totalImages":0}';
+    const database = JSON.parse(savedData);
+    database.images.push(imageData);
+    database.lastUpdated = new Date().toISOString();
+    database.totalImages = database.images.length;
+    localStorage.setItem('imagesDatabase', JSON.stringify(database));
+    
+    return { success: true, message: '数据已保存到本地存储', totalImages: database.totalImages };
+  }
+}
+
+// 获取图片数据（带fallback到localStorage）
+export async function getImageData() {
+  try {
+    // 首先尝试使用API
+    return await getImageDataFromApi();
+  } catch (apiError) {
+    // API失败，回退到localStorage
+    console.warn('API获取失败，回退到localStorage:', apiError);
+    
+    const savedData = localStorage.getItem('imagesDatabase');
+    if (savedData) {
+      return JSON.parse(savedData);
+    } else {
+      return { images: [], lastUpdated: "", totalImages: 0 };
+    }
+  }
+}

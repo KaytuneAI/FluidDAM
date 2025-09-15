@@ -26,6 +26,12 @@ app.use((req, res, next) => {
 app.use(express.json())
 app.use(express.static('public'))
 
+// 创建分享文件夹
+const sharesDir = path.join(__dirname, 'public', 'shares')
+if (!fs.existsSync(sharesDir)) {
+  fs.mkdirSync(sharesDir, { recursive: true })
+}
+
 // 保存图片数据到JSON文件
 app.post('/api/save-image-data', (req, res) => {
   try {
