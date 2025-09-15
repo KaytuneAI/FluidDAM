@@ -21,12 +21,23 @@ export async function checkApiAvailability() {
     const apiBaseUrl = getApiBaseUrl();
     if (!apiBaseUrl) return false;
     
+    // 使用AbortController设置超时
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3000); // 3秒超时
+    
     const response = await fetch(`${apiBaseUrl}/api/get-image-data`, {
       method: 'GET',
-      timeout: 3000 // 3秒超时
+      signal: controller.signal
     });
+    
+    clearTimeout(timeoutId);
     return response.ok;
   } catch (error) {
+    if (error.name === 'AbortError') {
+      console.warn('API连接超时，将使用localStorage');
+    } else {
+      console.warn('API不可用，将使用localStorage:', error.message);
+    }
     return false;
   }
 }
@@ -39,13 +50,20 @@ export async function saveImageDataToApi(imageData) {
       throw new Error('API base URL not available');
     }
     
+    // 设置超时
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000); // 5秒超时
+    
     const response = await fetch(`${apiBaseUrl}/api/save-image-data`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(imageData)
+      body: JSON.stringify(imageData),
+      signal: controller.signal
     });
+    
+    clearTimeout(timeoutId);
     
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
@@ -53,6 +71,9 @@ export async function saveImageDataToApi(imageData) {
     
     return await response.json();
   } catch (error) {
+    if (error.name === 'AbortError') {
+      throw new Error('API连接超时');
+    }
     throw error;
   }
 }
@@ -65,9 +86,16 @@ export async function getImageDataFromApi() {
       throw new Error('API base URL not available');
     }
     
+    // 设置超时
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3000); // 3秒超时
+    
     const response = await fetch(`${apiBaseUrl}/api/get-image-data`, {
-      method: 'GET'
+      method: 'GET',
+      signal: controller.signal
     });
+    
+    clearTimeout(timeoutId);
     
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
@@ -75,6 +103,9 @@ export async function getImageDataFromApi() {
     
     return await response.json();
   } catch (error) {
+    if (error.name === 'AbortError') {
+      throw new Error('API连接超时');
+    }
     throw error;
   }
 }

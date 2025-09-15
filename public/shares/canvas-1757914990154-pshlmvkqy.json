@@ -1,0 +1,165 @@
+{
+  "version": "1.0",
+  "type": "shared_canvas",
+  "sharedAt": "2025-09-15T05:43:10.154Z",
+  "canvasData": {},
+  "currentPageId": "page:oXC3d1TXkRI4pYbEhNMu_",
+  "imageInfo": [
+    {
+      "shapeId": "shape:ucg2TcPHrb09lz82AQVi_",
+      "assetId": "asset:ba4bf2c2-1b28-4349-948c-874d8d22bd34",
+      "fileName": "image_shape:ucg2TcPHrb09lz82AQVi_",
+      "width": 256.5,
+      "height": 123.12000000000002,
+      "x": 14.25,
+      "y": 10.469999999999999
+    },
+    {
+      "shapeId": "shape:pO0OoPMoqgUI5K90YNmfC",
+      "assetId": "asset:86849e6e-c0fa-47dd-92ba-65f530c8a851",
+      "fileName": "image_shape:pO0OoPMoqgUI5K90YNmfC",
+      "width": 256.5,
+      "height": 123.12,
+      "x": 14.25,
+      "y": 10.469999999999999
+    },
+    {
+      "shapeId": "shape:99C5eudQP6ZJdAHMDeS1C",
+      "assetId": "asset:86849e6e-c0fa-47dd-92ba-65f530c8a851",
+      "fileName": "image_shape:99C5eudQP6ZJdAHMDeS1C",
+      "width": 256.5,
+      "height": 123.12000000000002,
+      "x": 14.25,
+      "y": 10.46999999999997
+    },
+    {
+      "shapeId": "shape:wzmQayNKM2U-wVlsXaqhA",
+      "assetId": "asset:ba4bf2c2-1b28-4349-948c-874d8d22bd34",
+      "fileName": "image_shape:wzmQayNKM2U-wVlsXaqhA",
+      "width": 256.5,
+      "height": 123.12000000000002,
+      "x": 14.25,
+      "y": 10.470000000000027
+    },
+    {
+      "shapeId": "shape:5_i3Ki6S4EHbf2nBm2dqQ",
+      "assetId": "asset:86849e6e-c0fa-47dd-92ba-65f530c8a851",
+      "fileName": "image_shape:5_i3Ki6S4EHbf2nBm2dqQ",
+      "width": 256.5,
+      "height": 123.12000000000002,
+      "x": 14.25,
+      "y": 10.469999999999995
+    },
+    {
+      "shapeId": "shape:EkK2VJeJ-eC8DE2jTLHgH",
+      "assetId": "asset:a10e9796-457f-4f98-82f9-dee6cd8717d1",
+      "fileName": "image_shape:EkK2VJeJ-eC8DE2jTLHgH",
+      "width": 111.37500000000001,
+      "height": 148.50000000000003,
+      "x": 86.8125,
+      "y": 4.125
+    },
+    {
+      "shapeId": "shape:-dPSGB3YwVj_D3UbYadA7",
+      "assetId": "asset:a10e9796-457f-4f98-82f9-dee6cd8717d1",
+      "fileName": "image_shape:-dPSGB3YwVj_D3UbYadA7",
+      "width": 111,
+      "height": 149,
+      "x": 87,
+      "y": 4
+    },
+    {
+      "shapeId": "shape:imPDCGKtqc2P6STbJqjO4",
+      "assetId": "asset:86849e6e-c0fa-47dd-92ba-65f530c8a851",
+      "fileName": "image_shape:imPDCGKtqc2P6STbJqjO4",
+      "width": 256.5,
+      "height": 123.12000000000002,
+      "x": 14.25,
+      "y": 10.46999999999997
+    },
+    {
+      "shapeId": "shape:b8CfZU3tDtZwlDKm5ym62",
+      "assetId": "asset:86849e6e-c0fa-47dd-92ba-65f530c8a851",
+      "fileName": "image_shape:b8CfZU3tDtZwlDKm5ym62",
+      "width": 256.5,
+      "height": 123.12000000000002,
+      "x": 14.25,
+      "y": 10.470000000000027
+    },
+    {
+      "shapeId": "shape:E9YH945B3C7jKTJWyYY3i",
+      "assetId": "asset:ba4bf2c2-1b28-4349-948c-874d8d22bd34",
+      "fileName": "image_shape:E9YH945B3C7jKTJWyYY3i",
+      "width": 256.5,
+      "height": 123.12,
+      "x": 14.25,
+      "y": 10.469999999999999
+    },
+    {
+      "shapeId": "shape:d2ZtYok4dQ10scdxT7YB0",
+      "assetId": "asset:86849e6e-c0fa-47dd-92ba-65f530c8a851",
+      "fileName": "image_shape:d2ZtYok4dQ10scdxT7YB0",
+      "width": 256.5,
+      "height": 123.12000000000002,
+      "x": 14.25,
+      "y": 10.470000000000027
+    },
+    {
+      "shapeId": "shape:TE9t-CgvDl-K1VC7JC1r9",
+      "assetId": "asset:ba4bf2c2-1b28-4349-948c-874d8d22bd34",
+      "fileName": "image_shape:TE9t-CgvDl-K1VC7JC1r9",
+      "width": 256.5,
+      "height": 123.12000000000002,
+      "x": 14.25,
+      "y": 10.46999999999997
+    },
+    {
+      "shapeId": "shape:mqM5hnNUJIXqBY1IPCBzA",
+      "assetId": "asset:86849e6e-c0fa-47dd-92ba-65f530c8a851",
+      "fileName": "image_shape:mqM5hnNUJIXqBY1IPCBzA",
+      "width": 256.5,
+      "height": 123.12000000000002,
+      "x": 14.25,
+      "y": 10.469999999999999
+    },
+    {
+      "shapeId": "shape:PqP3FFsZW5E4kpEvhEEFB",
+      "assetId": "asset:e39f287a-1d5e-4d1a-b5e4-e6bd35eac193",
+      "fileName": "image_shape:PqP3FFsZW5E4kpEvhEEFB",
+      "width": 148.5,
+      "height": 148.5,
+      "x": 68.25,
+      "y": 4.125
+    },
+    {
+      "shapeId": "shape:v1f9fTlIiAcok0TOP_Yjt",
+      "assetId": "asset:86849e6e-c0fa-47dd-92ba-65f530c8a851",
+      "fileName": "image_shape:v1f9fTlIiAcok0TOP_Yjt",
+      "width": 256.5,
+      "height": 123.12000000000002,
+      "x": 14.25,
+      "y": 10.469999999999999
+    },
+    {
+      "shapeId": "shape:yym8IsDFAvHoueeog0amz",
+      "assetId": "asset:5e6f7d12-11a7-4c9c-acc5-2cec334503ec",
+      "fileName": "image_shape:yym8IsDFAvHoueeog0amz",
+      "width": 148.5,
+      "height": 148.5,
+      "x": 68.25,
+      "y": 4.125
+    },
+    {
+      "shapeId": "shape:HYvjtvFX57HKcUCNFEuZO",
+      "assetId": "asset:ba4bf2c2-1b28-4349-948c-874d8d22bd34",
+      "fileName": "image_shape:HYvjtvFX57HKcUCNFEuZO",
+      "width": 257,
+      "height": 123,
+      "x": 14,
+      "y": 11
+    }
+  ],
+  "totalImages": 17,
+  "shareId": "canvas-1757914990154-pshlmvkqy",
+  "expiresAt": "2025-09-22T05:43:10.154Z"
+}

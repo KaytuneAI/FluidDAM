@@ -85,4 +85,9 @@ export const highlightStyle = `
     0% { opacity: 0.6; transform: scale(1); }
     100% { opacity: 1; transform: scale(1.05); }
   }
+  
+  @keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
 `;

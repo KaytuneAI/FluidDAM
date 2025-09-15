@@ -4,6 +4,7 @@ import { placeAssetIntoSelectedFrame } from '../utils/assetUtils.js';
 import InsertImageButton from './InsertImageButton.jsx';
 import LoadCanvasButton from './LoadCanvasButton.jsx';
 import SaveCanvasButton from './SaveCanvasButton.jsx';
+import ShareCanvasButton from './ShareCanvasButton.jsx';
 
 export default function IntegratedAssetSidebar({ editor, selectedFrame, setIsLoading, platform = "TM", width }) {
   const [usedAssetIds, setUsedAssetIds] = useState(new Set());
@@ -172,6 +173,7 @@ export default function IntegratedAssetSidebar({ editor, selectedFrame, setIsLoa
           <InsertImageButton editor={editor} selectedFrame={selectedFrame} />
           <LoadCanvasButton editor={editor} setIsLoading={setIsLoading} />
           <SaveCanvasButton editor={editor} />
+          <ShareCanvasButton editor={editor} />
         </div>
       </div>
 
