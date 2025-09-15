@@ -154,6 +154,7 @@ export default function IntegratedAssetSidebar({ editor, selectedFrame, setIsLoa
     placeAssetIntoSelectedFrame(editor, assetId, platform);
   }, [editor, platform]);
 
+
   return (
     <div style={{
       ...sidebarStyles.container,
@@ -169,11 +170,61 @@ export default function IntegratedAssetSidebar({ editor, selectedFrame, setIsLoa
         gap: 8
       }}>
         <div style={{fontWeight: 600, fontSize: 14}}>素材管理</div>
-        <div style={{display: 'flex', gap: 6}}>
+        <div style={{display: 'flex', gap: 6, flexWrap: 'wrap'}}>
           <InsertImageButton editor={editor} selectedFrame={selectedFrame} />
           <LoadCanvasButton editor={editor} setIsLoading={setIsLoading} />
           <SaveCanvasButton editor={editor} />
           <ShareCanvasButton editor={editor} />
+        </div>
+        <div style={{display: 'flex', gap: 6, marginTop: 4}}>
+          <button 
+            onClick={() => {
+              if (confirm('重置/关闭画布将清空所有内容，未保存的数据将丢失。确定继续吗？')) {
+                try {
+                  console.log('开始重置画布...');
+                  
+                  // 清空当前画布
+                  const currentShapes = editor.getCurrentPageShapes();
+                  console.log('当前形状数量:', currentShapes.length);
+                  
+                  if (currentShapes.length > 0) {
+                    const shapeIds = currentShapes.map(shape => shape.id);
+                    editor.deleteShapes(shapeIds);
+                    console.log('已删除形状:', shapeIds.length);
+                  }
+                  
+                  // 清除自动保存数据
+                  localStorage.removeItem('autoSaveCanvas');
+                  localStorage.removeItem('currentImageIds');
+                  console.log('已清除自动保存数据');
+                  
+                  // 重置视图
+                  editor.resetZoom();
+                  editor.panTo(0, 0);
+                  console.log('已重置视图');
+                  
+                  console.log('画布重置成功！');
+                } catch (error) {
+                  console.error('重置画布失败:', error);
+                }
+              }
+            }}
+            style={{
+              background: '#6c757d',
+              color: 'white',
+              border: 'none',
+              padding: '6px 12px',
+              borderRadius: '4px',
+              fontSize: '12px',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px'
+            }}
+            title="重置画布 (Ctrl+R)"
+          >
+            🔁 关闭/重置画布
+          </button>
         </div>
       </div>
 

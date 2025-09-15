@@ -111,3 +111,6 @@ $RECYCLE.BIN/
 *.xlsx
 *.xls
 *.csv
+
+# Share files (runtime generated)
+public/shares/
