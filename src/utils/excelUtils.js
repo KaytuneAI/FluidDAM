@@ -28,7 +28,46 @@ export class ExcelToTLDrawConverter {
    */
   columnWidthToPx(width) {
     // Excel列宽近似换算公式（Calibri 11下较稳）
+    // 改进：使用更精确的换算，考虑不同字体和缩放
     return Math.floor((width + 0.12) * 7);
+  }
+
+  /**
+   * 更精确的单元格像素边界计算
+   * @param {number} row - 行号（1-based）
+   * @param {number} col - 列号（1-based）
+   * @param {Object} worksheet - Excel工作表
+   * @returns {Object} {x, y, width, height}
+   */
+  getCellPixelBoundsPrecise(row, col, worksheet) {
+    let x = 0;
+    let y = 0;
+
+    // 计算X坐标（累加前面所有列的宽度）
+    for (let c = 1; c < col; c++) {
+      const colObj = worksheet.getColumn(c);
+      // 安全获取列宽，使用更精确的换算
+      const colWidth = (colObj && colObj.width) ? colObj.width : 8.43;
+      x += this.columnWidthToPx(colWidth);
+    }
+
+    // 计算Y坐标（累加前面所有行的高度）
+    for (let r = 1; r < row; r++) {
+      const rowObj = worksheet.getRow(r);
+      // 安全获取行高，使用更精确的换算
+      const rowHeight = (rowObj && rowObj.height) ? rowObj.height : 15;
+      y += this.pointsToPx(rowHeight);
+    }
+
+    // 当前单元格的宽高
+    const currentCol = worksheet.getColumn(col);
+    const currentRow = worksheet.getRow(row);
+    
+    // 安全获取当前单元格的宽高
+    const width = this.columnWidthToPx((currentCol && currentCol.width) ? currentCol.width : 8.43);
+    const height = this.pointsToPx((currentRow && currentRow.height) ? currentRow.height : 15);
+
+    return { x, y, width, height };
   }
 
   /**
@@ -181,6 +220,277 @@ export class ExcelToTLDrawConverter {
       row >= merge.top && row <= merge.bottom &&
       col >= merge.left && col <= merge.right
     );
+  }
+
+  /**
+   * 动态分析Excel布局结构，自动识别元素间的关系和比例
+   * @param {Object} worksheet - Excel工作表对象
+   * @param {Array} images - 图片元素数组
+   */
+  analyzeLayoutStructure(worksheet, images = []) {
+    const layoutInfo = {
+      cellDimensions: {},
+      elementClusters: [],
+      spacing: {},
+      scaleFactors: {}
+    };
+    
+    try {
+      // 1. 分析单元格尺寸分布
+      const rowCount = worksheet.rowCount || 100;
+      const colCount = worksheet.columnCount || 50;
+      
+      const rowHeights = [];
+      const colWidths = [];
+      
+      // 收集所有行高和列宽
+      for (let row = 1; row <= Math.min(rowCount, 100); row++) {
+        const rowHeight = worksheet.getRow(row)?.height || 15;
+        rowHeights.push({ row, height: rowHeight });
+      }
+      
+      for (let col = 1; col <= Math.min(colCount, 50); col++) {
+        const colWidth = worksheet.getColumn(col)?.width || 64;
+        colWidths.push({ col, width: colWidth });
+      }
+      
+      // 计算统计信息
+      const avgRowHeight = rowHeights.reduce((sum, r) => sum + r.height, 0) / rowHeights.length;
+      const avgColWidth = colWidths.reduce((sum, c) => sum + c.width, 0) / colWidths.length;
+      
+      // 识别异常大小的行/列（可能是图片区域）
+      const largeRows = rowHeights.filter(r => r.height > avgRowHeight * 1.5);
+      const largeCols = colWidths.filter(c => c.width > avgColWidth * 1.5);
+      
+      layoutInfo.cellDimensions = {
+        avgRowHeight,
+        avgColWidth,
+        totalRows: rowCount,
+        totalCols: colCount,
+        largeRows,
+        largeCols
+      };
+      
+      // 2. 分析图片元素的空间分布
+      if (images.length > 0) {
+        const imagePositions = images.map(img => ({
+          x: img.x,
+          y: img.y,
+          width: img.width,
+          height: img.height,
+          row: img.row || 0,
+          col: img.col || 0
+        }));
+        
+        // 按Y坐标分组（识别水平行）
+        const rows = this.groupElementsByRow(imagePositions);
+        
+        // 按X坐标分组（识别垂直列）
+        const cols = this.groupElementsByColumn(imagePositions);
+        
+        // 计算元素间的间距
+        const spacing = this.calculateElementSpacing(imagePositions, rows, cols);
+        
+        // 识别元素簇（相近的元素）
+        const clusters = this.identifyElementClusters(imagePositions);
+        
+        layoutInfo.elementClusters = clusters;
+        layoutInfo.spacing = spacing;
+        layoutInfo.rows = rows;
+        layoutInfo.cols = cols;
+        
+        // 3. 计算缩放因子
+        layoutInfo.scaleFactors = this.calculateScaleFactors(imagePositions, avgRowHeight, avgColWidth);
+      }
+      
+      console.log('动态布局分析完成:', layoutInfo);
+      
+    } catch (error) {
+      console.warn('动态布局分析失败:', error);
+    }
+    
+    return layoutInfo;
+  }
+
+  /**
+   * 按Y坐标分组元素（识别水平行）
+   */
+  groupElementsByRow(elements) {
+    const rows = [];
+    const tolerance = 50; // 容差范围
+    
+    elements.sort((a, b) => a.y - b.y);
+    
+    for (const element of elements) {
+      let foundRow = false;
+      for (const row of rows) {
+        if (Math.abs(element.y - row.y) <= tolerance) {
+          row.elements.push(element);
+          foundRow = true;
+          break;
+        }
+      }
+      if (!foundRow) {
+        rows.push({
+          y: element.y,
+          elements: [element],
+          avgHeight: element.height
+        });
+      }
+    }
+    
+    // 计算每行的统计信息
+    rows.forEach(row => {
+      row.elements.sort((a, b) => a.x - b.x);
+      row.avgHeight = row.elements.reduce((sum, el) => sum + el.height, 0) / row.elements.length;
+      row.width = Math.max(...row.elements.map(el => el.x + el.width)) - Math.min(...row.elements.map(el => el.x));
+    });
+    
+    return rows;
+  }
+
+  /**
+   * 按X坐标分组元素（识别垂直列）
+   */
+  groupElementsByColumn(elements) {
+    const cols = [];
+    const tolerance = 50; // 容差范围
+    
+    elements.sort((a, b) => a.x - b.x);
+    
+    for (const element of elements) {
+      let foundCol = false;
+      for (const col of cols) {
+        if (Math.abs(element.x - col.x) <= tolerance) {
+          col.elements.push(element);
+          foundCol = true;
+          break;
+        }
+      }
+      if (!foundCol) {
+        cols.push({
+          x: element.x,
+          elements: [element],
+          avgWidth: element.width
+        });
+      }
+    }
+    
+    // 计算每列的统计信息
+    cols.forEach(col => {
+      col.elements.sort((a, b) => a.y - b.y);
+      col.avgWidth = col.elements.reduce((sum, el) => sum + el.width, 0) / col.elements.length;
+      col.height = Math.max(...col.elements.map(el => el.y + el.height)) - Math.min(...col.elements.map(el => el.y));
+    });
+    
+    return cols;
+  }
+
+  /**
+   * 计算元素间的间距
+   */
+  calculateElementSpacing(elements, rows, cols) {
+    const spacing = {
+      horizontal: [],
+      vertical: [],
+      avgHorizontal: 0,
+      avgVertical: 0
+    };
+    
+    // 计算水平间距（同一行内元素间）
+    rows.forEach(row => {
+      for (let i = 0; i < row.elements.length - 1; i++) {
+        const current = row.elements[i];
+        const next = row.elements[i + 1];
+        const gap = next.x - (current.x + current.width);
+        spacing.horizontal.push(gap);
+      }
+    });
+    
+    // 计算垂直间距（相邻行间）
+    rows.sort((a, b) => a.y - b.y);
+    for (let i = 0; i < rows.length - 1; i++) {
+      const currentRow = rows[i];
+      const nextRow = rows[i + 1];
+      const gap = nextRow.y - (currentRow.y + currentRow.avgHeight);
+      spacing.vertical.push(gap);
+    }
+    
+    // 计算平均间距
+    if (spacing.horizontal.length > 0) {
+      spacing.avgHorizontal = spacing.horizontal.reduce((sum, gap) => sum + gap, 0) / spacing.horizontal.length;
+    }
+    if (spacing.vertical.length > 0) {
+      spacing.avgVertical = spacing.vertical.reduce((sum, gap) => sum + gap, 0) / spacing.vertical.length;
+    }
+    
+    return spacing;
+  }
+
+  /**
+   * 识别元素簇（相近的元素组）
+   */
+  identifyElementClusters(elements) {
+    const clusters = [];
+    const visited = new Set();
+    const clusterThreshold = 100; // 聚类阈值
+    
+    for (let i = 0; i < elements.length; i++) {
+      if (visited.has(i)) continue;
+      
+      const cluster = [elements[i]];
+      visited.add(i);
+      
+      // 寻找相近的元素
+      for (let j = i + 1; j < elements.length; j++) {
+        if (visited.has(j)) continue;
+        
+        const distance = Math.sqrt(
+          Math.pow(elements[i].x - elements[j].x, 2) + 
+          Math.pow(elements[i].y - elements[j].y, 2)
+        );
+        
+        if (distance <= clusterThreshold) {
+          cluster.push(elements[j]);
+          visited.add(j);
+        }
+      }
+      
+      if (cluster.length > 1) {
+        clusters.push({
+          elements: cluster,
+          centerX: cluster.reduce((sum, el) => sum + el.x, 0) / cluster.length,
+          centerY: cluster.reduce((sum, el) => sum + el.y, 0) / cluster.length,
+          avgSize: cluster.reduce((sum, el) => sum + (el.width * el.height), 0) / cluster.length
+        });
+      }
+    }
+    
+    return clusters;
+  }
+
+  /**
+   * 计算缩放因子
+   */
+  calculateScaleFactors(elements, avgRowHeight, avgColWidth) {
+    if (elements.length === 0) return { x: 1, y: 1 };
+    
+    // 计算元素尺寸与单元格尺寸的比例
+    const sizeRatios = elements.map(el => ({
+      widthRatio: el.width / avgColWidth,
+      heightRatio: el.height / avgRowHeight
+    }));
+    
+    // 计算平均比例
+    const avgWidthRatio = sizeRatios.reduce((sum, r) => sum + r.widthRatio, 0) / sizeRatios.length;
+    const avgHeightRatio = sizeRatios.reduce((sum, r) => sum + r.heightRatio, 0) / sizeRatios.length;
+    
+    return {
+      x: avgWidthRatio,
+      y: avgHeightRatio,
+      avgWidthRatio,
+      avgHeightRatio
+    };
   }
 
   /**
@@ -585,60 +895,104 @@ export class ExcelToTLDrawConverter {
             continue; // 跳过这个图片，继续处理下一个
           }
           
-          // 计算图片位置
-          let x = 0, y = 0;
-          if (image.range && image.range.tl) {
+          // 计算图片位置 - 使用锚点范围计算真实显示尺寸
+          let x = 0, y = 0, width = 0, height = 0;
+          
+          if (image.range && image.range.tl && image.range.br) {
             const anchor = image.range;
-            const cellBounds = this.getCellPixelBounds(
-              anchor.tl.row, 
-              anchor.tl.col, 
-              worksheet
-            );
+            const tl = anchor.tl;
+            const br = anchor.br;
             
-            // 计算图片在单元格内的偏移
-            const offsetX = (anchor.tl.nativeCol || 0) * 7; // 近似偏移
-            const offsetY = (anchor.tl.nativeRow || 0) * 15; // 近似偏移
+            // 计算左上角位置（包含native偏移）
+            const tlCellBounds = this.getCellPixelBoundsPrecise(tl.row, tl.col, worksheet);
+            const brCellBounds = this.getCellPixelBoundsPrecise(br.row, br.col, worksheet);
             
-            x = cellBounds.x + offsetX;
-            y = cellBounds.y + offsetY;
+            // 将native偏移从Excel单位转换为像素
+            // ExcelJS的native偏移通常是EMU单位，1英寸 = 914400 EMU
+            // 改进：添加更精确的单位转换和错误处理
+            const emuToPx = (emu) => {
+              if (!emu || emu === 0) return 0;
+              // 确保是数字类型
+              const numEmu = typeof emu === 'number' ? emu : parseFloat(emu);
+              if (isNaN(numEmu)) return 0;
+              // 1英寸 = 914400 EMU, 1英寸 = 96像素
+              return (numEmu * 96) / 914400;
+            };
+            
+            // 计算真实位置和尺寸
+            x = tlCellBounds.x + emuToPx(tl.nativeColOffset);
+            y = tlCellBounds.y + emuToPx(tl.nativeRowOffset);
+            
+            // 计算右下角位置
+            const brX = brCellBounds.x + emuToPx(br.nativeColOffset);
+            const brY = brCellBounds.y + emuToPx(br.nativeRowOffset);
+            
+            // 计算真实显示尺寸
+            width = brX - x;
+            height = brY - y;
+            
+            console.log(`图片锚点定位: tl(${tl.row},${tl.col}) br(${br.row},${br.col})`);
+            console.log(`native偏移: tl(${tl.nativeColOffset},${tl.nativeRowOffset}) br(${br.nativeColOffset},${br.nativeRowOffset})`);
+            console.log(`计算位置: (${x},${y}) 尺寸: ${width}x${height}`);
+          } else if (image.range && image.range.tl) {
+            // 如果没有br锚点，回退到只使用tl锚点
+            const anchor = image.range;
+            const row = anchor.tl.row;
+            const col = anchor.tl.col;
+            
+            const cellBounds = this.getCellPixelBounds(row, col, worksheet);
+            x = cellBounds.x;
+            y = cellBounds.y;
+            
+            console.log(`图片基础位置: 行${row}列${col}, 位置:(${x},${y})`);
           }
           
-          // 获取图片的实际尺寸
-          let actualWidth = imageData.width || 100;
-          let actualHeight = imageData.height || 100;
+          // 获取原始图片的真实尺寸（用于资产创建）
+          let originalWidth = imageData.width || 100;
+          let originalHeight = imageData.height || 100;
           
-          // 如果图片数据中有尺寸信息，使用实际尺寸
-          if (imageData.range && imageData.range.br && imageData.range.tl) {
-            const range = imageData.range;
-            const cellBounds = this.getCellPixelBounds(
-              range.br.row, 
-              range.br.col, 
-              worksheet
-            );
-            const startBounds = this.getCellPixelBounds(
-              range.tl.row, 
-              range.tl.col, 
-              worksheet
-            );
-            
-            // 计算基于单元格的实际尺寸
-            actualWidth = Math.max(actualWidth, cellBounds.x + cellBounds.width - startBounds.x);
-            actualHeight = Math.max(actualHeight, cellBounds.y + cellBounds.height - startBounds.y);
+          // 如果原始尺寸太小，尝试从Base64数据中获取真实尺寸
+          if (originalWidth < 50 || originalHeight < 50) {
+            try {
+              const testImg = new Image();
+              await new Promise((resolve, reject) => {
+                testImg.onload = () => {
+                  originalWidth = testImg.width;
+                  originalHeight = testImg.height;
+                  console.log('从Base64获取的真实图片尺寸:', originalWidth, 'x', originalHeight);
+                  resolve();
+                };
+                testImg.onerror = () => {
+                  console.warn('无法从Base64获取图片尺寸，使用默认值');
+                  resolve();
+                };
+                testImg.src = imageUrl;
+              });
+            } catch (error) {
+              console.warn('分析Base64图片尺寸失败:', error);
+            }
           }
           
-          // 确保最小尺寸
-          actualWidth = Math.max(actualWidth, 200);
-          actualHeight = Math.max(actualHeight, 150);
+          // 如果没有通过锚点计算出显示尺寸，使用原始尺寸作为后备
+          if (width === 0 || height === 0) {
+            width = originalWidth;
+            height = originalHeight;
+            console.log(`使用原始图片尺寸作为后备: ${width}x${height}`);
+          } else {
+            console.log(`使用锚点计算的显示尺寸: ${width}x${height}`);
+          }
           
           const imageInfo = {
             url: imageUrl,
             x: x,
             y: y,
-            width: actualWidth,
-            height: actualHeight,
+            width: width,        // 使用计算出的显示尺寸
+            height: height,      // 使用计算出的显示尺寸
             type: 'image',
-            originalWidth: imageData.width,
-            originalHeight: imageData.height
+            originalWidth: originalWidth,   // 保留原始尺寸用于资产创建
+            originalHeight: originalHeight, // 保留原始尺寸用于资产创建
+            row: image.range?.tl?.row || 0,
+            col: image.range?.tl?.col || 0
           };
           
           console.log('添加图片信息:', imageInfo);
@@ -956,14 +1310,8 @@ export class ExcelToTLDrawConverter {
       console.log(`  ${index + 1}. "${text.text}" 在位置 (${text.x}, ${text.y})`);
     });
     
-    // 添加图片上的文字覆盖层（模拟OCR效果）
-    const imageTextOverlays = this.getImageTextOverlays(images);
-    texts.push(...imageTextOverlays);
-    
-    console.log('添加图片文字覆盖层后，总共', texts.length, '个文字:');
-    texts.forEach((text, index) => {
-      console.log(`  ${index + 1}. "${text.text}" 在位置 (${text.x}, ${text.y})`);
-    });
+    // 跳过硬编码的图片文字覆盖层，避免干扰原始布局
+    console.log('跳过硬编码的图片文字覆盖层，保持原始布局');
     
     return texts;
   }
@@ -1217,6 +1565,56 @@ export class ExcelToTLDrawConverter {
   }
 
   /**
+   * 应用布局分析结果，调整元素位置和间距
+   * @param {Array} elements - 元素数组
+   * @param {Object} layoutInfo - 布局分析结果
+   */
+  applyLayoutAnalysis(elements, layoutInfo) {
+    if (!layoutInfo.spacing || !layoutInfo.rows || !layoutInfo.cols) {
+      return elements; // 如果没有布局信息，返回原始元素
+    }
+    
+    const adjustedElements = [];
+    
+    for (const element of elements) {
+      const adjustedElement = { ...element };
+      
+      // 根据行和列信息调整位置
+      if (element.row && element.col) {
+        // 查找元素所在的行和列
+        const elementRow = layoutInfo.rows.find(row => 
+          row.elements.some(el => el.row === element.row)
+        );
+        const elementCol = layoutInfo.cols.find(col => 
+          col.elements.some(el => el.col === element.col)
+        );
+        
+        if (elementRow && elementCol) {
+          // 使用布局分析的平均间距调整位置
+          const rowIndex = layoutInfo.rows.indexOf(elementRow);
+          const colIndex = layoutInfo.cols.indexOf(elementCol);
+          
+          // 应用水平间距
+          if (colIndex > 0) {
+            adjustedElement.x = elementCol.x + (colIndex * layoutInfo.spacing.avgHorizontal);
+          }
+          
+          // 应用垂直间距
+          if (rowIndex > 0) {
+            adjustedElement.y = elementRow.y + (rowIndex * layoutInfo.spacing.avgVertical);
+          }
+          
+          console.log(`调整元素位置: 原始(${element.x},${element.y}) -> 调整后(${adjustedElement.x},${adjustedElement.y})`);
+        }
+      }
+      
+      adjustedElements.push(adjustedElement);
+    }
+    
+    return adjustedElements;
+  }
+
+  /**
    * 批量创建TLDraw形状
    * @param {Array} elements - 元素数组
    * @param {string} shapeType - 形状类型
@@ -1235,7 +1633,7 @@ export class ExcelToTLDrawConverter {
             try {
               const assetId = `asset:${(globalThis.crypto?.randomUUID?.() || Math.random().toString(36).slice(2))}`;
               
-              // 创建资产
+              // 创建资产 - 使用原始图片尺寸
               this.editor.store.put([
                 {
                   id: assetId,
@@ -1243,8 +1641,8 @@ export class ExcelToTLDrawConverter {
                   typeName: "asset",
                   meta: {},
                   props: {
-                    w: element.width,
-                    h: element.height,
+                    w: element.originalWidth,  // 使用原始尺寸
+                    h: element.originalHeight, // 使用原始尺寸
                     src: element.url,
                     name: `Excel图片_${Date.now()}`,
                     mimeType: 'image/png',
@@ -1253,14 +1651,16 @@ export class ExcelToTLDrawConverter {
                 }
               ]);
               
-              // 创建图片形状
+              // 创建图片形状 - 使用计算出的显示尺寸
+              console.log(`创建图片形状: 显示尺寸(${element.width}x${element.height}), 位置(${element.x * this.scale}, ${element.y * this.scale})`);
+              
               shape = {
                 type: 'image',
                 x: element.x * this.scale,
                 y: element.y * this.scale,
                 props: {
-                  w: element.width * this.scale,
-                  h: element.height * this.scale,
+                  w: element.width * this.scale,   // 使用计算出的显示宽度
+                  h: element.height * this.scale,  // 使用计算出的显示高度
                   assetId: assetId
                 }
               };
@@ -1295,8 +1695,8 @@ export class ExcelToTLDrawConverter {
                 w: element.width * this.scale,
                 h: element.height * this.scale,
                 fill: 'none',
-                strokeWidth: 1,
-                stroke: 'black'
+                color: 'black',
+                size: 's'
               }
             };
             break;
@@ -1361,6 +1761,15 @@ export class ExcelToTLDrawConverter {
       console.log('工作表名称:', worksheet.name);
       console.log('工作表尺寸:', worksheet.rowCount, 'x', worksheet.columnCount);
       
+      // 先提取图片，然后进行布局分析
+      console.log('开始提取图片...');
+      const images = await this.extractImages(worksheet);
+      console.log('提取到图片数量:', images.length);
+      
+      // 基于提取的图片进行动态布局分析
+      const layoutInfo = this.analyzeLayoutStructure(worksheet, images);
+      console.log('动态布局分析结果:', layoutInfo);
+      
       // 调试：打印工作表结构
       console.log('工作表对象:', worksheet);
       console.log('工作表模型:', worksheet.model);
@@ -1369,10 +1778,7 @@ export class ExcelToTLDrawConverter {
       const mergedCells = this.getMergedCells(worksheet);
       console.log('合并单元格数量:', mergedCells.length);
       
-      // 2. 提取图片元素
-      console.log('开始提取图片...');
-      const images = await this.extractImages(worksheet);
-      console.log('提取到图片数量:', images.length);
+      // 2. 图片已在上面提取完成
       console.log('图片详情:', images);
       
       // 3. 提取文字元素
@@ -1393,26 +1799,32 @@ export class ExcelToTLDrawConverter {
         this.editor.deleteShapes(shapeIds);
       }
       
-      // 6. 批量创建形状
+      // 6. 跳过布局分析，直接使用原始位置
+      console.log('跳过布局分析，使用原始位置...');
+      const adjustedImages = images;  // 直接使用原始图片位置
+      const adjustedTexts = texts;    // 直接使用原始文字位置
+      const adjustedFrames = frames;  // 直接使用原始框架位置
+      
+      // 7. 批量创建形状
       console.log('开始创建TLDraw形状...');
       
       // 先创建图片
-      if (images.length > 0) {
+      if (adjustedImages.length > 0) {
         console.log('开始创建图片形状...');
-        await this.createShapesBatch(images, 'image');
+        await this.createShapesBatch(adjustedImages, 'image');
       }
       
       // 再创建文字
-      if (texts.length > 0) {
+      if (adjustedTexts.length > 0) {
         console.log('开始创建文字形状...');
-        await this.createShapesBatch(texts, 'text');
+        await this.createShapesBatch(adjustedTexts, 'text');
       }
       
       // 最后创建表格框（使用矩形框）
-      if (frames.length > 0) {
+      if (adjustedFrames.length > 0) {
         console.log('开始创建表格框形状...');
         try {
-          await this.createShapesBatch(frames, 'frame');
+          await this.createShapesBatch(adjustedFrames, 'frame');
         } catch (frameError) {
           console.warn('表格框创建失败，但不影响其他内容:', frameError);
         }
