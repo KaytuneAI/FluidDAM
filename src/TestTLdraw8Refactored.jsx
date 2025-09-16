@@ -176,12 +176,34 @@ export default function MinimalTldrawInsert() {
         autoSave: true
       };
       
-      // 保存到localStorage
-      localStorage.setItem('autoSaveCanvas', JSON.stringify(saveData));
+      // 检查数据大小并尝试保存到localStorage
+      const dataString = JSON.stringify(saveData);
+      const dataSize = new Blob([dataString]).size;
+      const maxSize = 5 * 1024 * 1024; // 5MB限制
       
-      // 自动保存完成，不显示提示
+      if (dataSize > maxSize) {
+        console.warn(`自动保存数据过大 (${(dataSize / 1024 / 1024).toFixed(2)}MB)，跳过自动保存`);
+        return;
+      }
       
-      console.log('画布状态已自动保存');
+      try {
+        localStorage.setItem('autoSaveCanvas', dataString);
+        console.log('画布状态已自动保存');
+      } catch (storageError) {
+        if (storageError.name === 'QuotaExceededError') {
+          console.warn('localStorage空间不足，跳过自动保存');
+          // 尝试清理旧的自动保存数据
+          try {
+            localStorage.removeItem('autoSaveCanvas');
+            localStorage.setItem('autoSaveCanvas', dataString);
+            console.log('清理旧数据后自动保存成功');
+          } catch (retryError) {
+            console.warn('即使清理旧数据后仍无法保存，跳过自动保存');
+          }
+        } else {
+          throw storageError;
+        }
+      }
     } catch (error) {
       console.error('自动保存失败:', error);
     } finally {

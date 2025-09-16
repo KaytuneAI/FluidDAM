@@ -5,6 +5,7 @@ import InsertImageButton from './InsertImageButton.jsx';
 import LoadCanvasButton from './LoadCanvasButton.jsx';
 import SaveCanvasButton from './SaveCanvasButton.jsx';
 import ShareCanvasButton from './ShareCanvasButton.jsx';
+import ImportExcelButton from './ImportExcelButton.jsx';
 
 export default function IntegratedAssetSidebar({ editor, selectedFrame, setIsLoading, platform = "TM", width }) {
   const [usedAssetIds, setUsedAssetIds] = useState(new Set());
@@ -225,6 +226,7 @@ export default function IntegratedAssetSidebar({ editor, selectedFrame, setIsLoa
           >
             🔁 关闭/重置画布
           </button>
+          <ImportExcelButton editor={editor} />
         </div>
       </div>
 
