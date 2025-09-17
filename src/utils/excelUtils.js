@@ -556,13 +556,13 @@ export class ExcelToTLDrawConverter {
         try {
           console.log(`解析drawing文件: ${drawingPath}`);
           
-          // 设置过滤选项
+          // 设置过滤选项 - 调试模式，放宽过滤条件
           const filterOpts = {
-            includeHidden: false,      // 不包含隐藏元素
+            includeHidden: true,       // 包含隐藏元素（调试）
             includeVML: false,         // 不包含VML元素
-            includePrintOnly: false,   // 不包含仅打印元素
-            minPixelSize: 2,           // 最小像素尺寸
-            clipToSheetBounds: true    // 裁剪到工作表边界
+            includePrintOnly: true,    // 包含仅打印元素（调试）
+            minPixelSize: 0,           // 最小像素尺寸设为0（调试）
+            clipToSheetBounds: false   // 不裁剪到工作表边界（调试）
           };
           
           const drawingResults = await DrawingML.parseDrawingML(zip, drawingPath, dims, filterOpts);
@@ -744,12 +744,16 @@ export class ExcelToTLDrawConverter {
             imageId = `image_${Math.random().toString(36).substr(2, 9)}`;
           }
           
-          // 检查是否已经处理过这张图片
-          if (processedImages.has(imageId)) {
-            console.log('跳过重复的图片:', imageId);
+          // 检查是否已经处理过这张图片（包含位置信息）
+          const tl = image.range?.tl || {};
+          const br = image.range?.br || {};
+          const key = `${imageData.imageId ?? imageId}@${tl.row},${tl.col},${br.row ?? ''},${br.col ?? ''}`;
+          
+          if (processedImages.has(key)) {
+            console.log('跳过重复的图片:', key);
             continue;
           }
-          processedImages.add(imageId);
+          processedImages.add(key);
           
           console.log('处理图片:', image, 'ID:', imageId);
           
@@ -1630,6 +1634,60 @@ export class ExcelToTLDrawConverter {
   }
 
   /**
+   * 将十六进制颜色映射到TLDraw支持的颜色名称
+   * @param {string} hexColor - 十六进制颜色值
+   * @returns {string} TLDraw颜色名称
+   */
+  mapColorToTLDraw(hexColor) {
+    if (!hexColor || typeof hexColor !== 'string') return 'black';
+    
+    // 移除#号并转换为小写
+    const hex = hexColor.replace('#', '').toLowerCase();
+    
+    // 常见颜色映射
+    const colorMap = {
+      '000000': 'black',
+      'ffffff': 'white',
+      'ff0000': 'red',
+      '00ff00': 'green',
+      '0000ff': 'blue',
+      'ffff00': 'yellow',
+      'ffa500': 'orange',
+      '800080': 'violet',
+      'ffc0cb': 'light-red',
+      '90ee90': 'light-green',
+      'add8e6': 'light-blue',
+      'dda0dd': 'light-violet',
+      '808080': 'grey'
+    };
+    
+    // 精确匹配
+    if (colorMap[hex]) {
+      return colorMap[hex];
+    }
+    
+    // 根据颜色值进行近似匹配
+    const r = parseInt(hex.substr(0, 2), 16);
+    const g = parseInt(hex.substr(2, 2), 16);
+    const b = parseInt(hex.substr(4, 2), 16);
+    
+    // 计算亮度
+    const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+    
+    if (brightness < 50) return 'black';
+    if (brightness > 200) return 'white';
+    
+    // 根据RGB值判断主要颜色
+    if (r > g && r > b) return 'red';
+    if (g > r && g > b) return 'green';
+    if (b > r && b > g) return 'blue';
+    if (r > 200 && g > 200 && b < 100) return 'yellow';
+    if (r > 200 && g > 100 && b < 100) return 'orange';
+    
+    return 'black'; // 默认返回黑色
+  }
+
+  /**
    * 解析Excel单元格颜色
    * @param {Object} color - ExcelJS颜色对象
    * @returns {string} 十六进制颜色值
@@ -1938,6 +1996,40 @@ export class ExcelToTLDrawConverter {
       return fullyContainingFrames;
     }
     
+    // 对于textbox，如果没找到完全包含的框架，尝试找重叠度最高的框架
+    if (img.type === 'textbox') {
+      let bestFrame = null;
+      let maxOverlap = 0;
+      
+      for (const frame of frames) {
+        const frameLeft = frame.x;
+        const frameTop = frame.y;
+        const frameRight = frame.x + frame.width;
+        const frameBottom = frame.y + frame.height;
+        
+        // 计算重叠区域
+        const overlapLeft = Math.max(imgLeft, frameLeft);
+        const overlapTop = Math.max(imgTop, frameTop);
+        const overlapRight = Math.min(imgRight, frameRight);
+        const overlapBottom = Math.min(imgBottom, frameBottom);
+        
+        if (overlapLeft < overlapRight && overlapTop < overlapBottom) {
+          const overlapArea = (overlapRight - overlapLeft) * (overlapBottom - overlapTop);
+          const overlapRatio = overlapArea / imgArea;
+          
+          if (overlapRatio > maxOverlap && overlapRatio > 0.3) { // 至少30%重叠
+            maxOverlap = overlapRatio;
+            bestFrame = frame;
+          }
+        }
+      }
+      
+      if (bestFrame) {
+        console.log(`textbox找到最佳重叠框架，重叠度: ${(maxOverlap * 100).toFixed(1)}%`);
+        return [bestFrame];
+      }
+    }
+    
     // 检查高重叠的框架，使用平衡的标准
     const highOverlapFrames = frames.filter(frame => {
       const overlapArea = this._calculateOverlapArea(
@@ -2019,6 +2111,67 @@ export class ExcelToTLDrawConverter {
       width: maxX - minX,
       height: maxY - minY
     };
+  }
+
+  /**
+   * 核心：把textbox适配到容器里，如果textbox在格子内就fit到格子内
+   * @param {Array} texts - 文字数组（包含textbox）
+   * @param {Array} frames - 框架数组
+   * @param {number} padding - 内边距，默认4像素
+   */
+  _fitTextboxesIntoFrames(texts, frames, padding = 4) {
+    console.log(`开始处理 ${texts.length} 个文字元素，${frames.length} 个框架`);
+    
+    for (let i = 0; i < texts.length; i++) {
+      const text = texts[i];
+      
+      // 只处理textbox类型的文字
+      if (text.type !== 'textbox') {
+        continue;
+      }
+      
+      console.log(`处理textbox ${i + 1}: 当前位置 (${text.x}, ${text.y}), 当前尺寸 ${text.width}x${text.height}`);
+      
+      // 查找所有包含此textbox的框架
+      const containingFrames = this._findAllContainingFrames(frames, text);
+      
+      console.log(`textbox ${i + 1}: 查找包含框架，textbox位置 (${text.x}, ${text.y}, ${text.width}x${text.height})`);
+      console.log(`textbox ${i + 1}: 找到 ${containingFrames.length} 个包含的框架`);
+      
+      if (containingFrames.length === 0) {
+        console.log(`textbox ${i + 1}: 未找到包含的框架，保持原始位置和尺寸`);
+        console.log(`textbox ${i + 1}: 可用框架数量: ${frames.length}`);
+        if (frames.length > 0) {
+          console.log(`textbox ${i + 1}: 第一个框架位置: (${frames[0].x}, ${frames[0].y}, ${frames[0].width}x${frames[0].height})`);
+        }
+        // 不在任何格子内的textbox，保持原始位置和尺寸
+        text.x = Math.round(text.x);
+        text.y = Math.round(text.y);
+        text.width = Math.round(text.width);
+        text.height = Math.round(text.height);
+        continue;
+      }
+      
+      // 如果textbox在格子内，适配到格子内
+      const frame = containingFrames[0]; // 使用第一个包含的框架
+      console.log(`textbox ${i + 1}: 适配到框架 (${frame.x}, ${frame.y}, ${frame.width}x${frame.height})`);
+      
+      // 计算适配后的位置和尺寸
+      const newX = frame.x + padding;
+      const newY = frame.y + padding;
+      const newWidth = Math.max(20, frame.width - padding * 2); // 最小宽度20px
+      const newHeight = Math.max(20, frame.height - padding * 2); // 最小高度20px
+      
+      // 更新textbox的位置和尺寸
+      text.x = Math.round(newX);
+      text.y = Math.round(newY);
+      text.width = Math.round(newWidth);
+      text.height = Math.round(newHeight);
+      
+      console.log(`textbox ${i + 1}: 适配后位置 (${text.x}, ${text.y}), 尺寸 ${text.width}x${text.height}`);
+    }
+    
+    console.log('textbox适配完成');
   }
 
   /**
@@ -2204,11 +2357,12 @@ export class ExcelToTLDrawConverter {
               continue;
             }
             
-            // 检查是否有样式信息（来自DrawingML）
-            const hasStyle = element.fill || element.stroke;
-            
-            if (hasStyle && element.type === 'textbox') {
-              // 创建带样式的文本框（使用geo形状）
+            // 检查是否是textbox类型
+            if (element.type === 'textbox') {
+              // 为所有textbox创建不透明白底
+              const backgroundColor = element.fill?.color || '#FFFFFF'; // 默认白色背景
+              
+              // 创建带背景的文本框（使用geo形状）
               shape = {
                 type: 'geo',
                 x: textX,
@@ -2217,12 +2371,8 @@ export class ExcelToTLDrawConverter {
                   geo: 'rectangle',
                   w: textW,
                   h: element.height * this.scale,
-                  fill: element.fill?.fill === 'solid' ? 'solid' : 'none',
-                  fillColor: element.fill?.color || '#FFFFFF',
-                  stroke: element.stroke?.stroke === 'solid' ? 'solid' : 'none',
-                  strokeColor: element.stroke?.color || '#000000',
-                  strokeWidth: element.stroke?.width || 1,
-                  opacity: element.fill?.opacity || 1
+                  fill: 'solid',
+                  color: this.mapColorToTLDraw(backgroundColor)
                 }
               };
               
@@ -2244,7 +2394,7 @@ export class ExcelToTLDrawConverter {
               shapes.push(textShape);
               continue;
             } else {
-              // 普通文字（无样式）
+              // 普通单元格文字（无背景）
               shape = {
                 type: 'text',
                 x: textX,
@@ -2288,8 +2438,7 @@ export class ExcelToTLDrawConverter {
                 w: frameW,
                 h: frameH,
                 fill: 'none',
-                color: 'black',
-                size: 's'
+                color: 'black'
               }
             };
             break;
@@ -2322,9 +2471,7 @@ export class ExcelToTLDrawConverter {
                 w: bgW,
                 h: bgH,
                 fill: 'solid',
-                fillColor: element.color,
-                stroke: 'none',
-                strokeWidth: 0
+                color: this.mapColorToTLDraw(element.color)
               }
             };
             break;
@@ -2497,6 +2644,11 @@ export class ExcelToTLDrawConverter {
       console.log('开始调整图片尺寸以适应容器...');
       this._fitImagesIntoFrames(adjustedImages, adjustedFrames, 0);
       console.log('图片尺寸调整完成');
+      
+      // 6.6. 把textbox适配到格子内
+      console.log('开始调整textbox以适应容器...');
+      this._fitTextboxesIntoFrames(adjustedTexts, adjustedFrames, 4);
+      console.log('textbox适配完成');
       
       // 7. 批量创建形状（按正确层级顺序）
       console.log('开始创建TLDraw形状...');

@@ -218,12 +218,40 @@ export function anchorToPixels(anchor, dims) {
       return null;
     }
 
-    // 检查数组边界
-    if (colFrom >= dims.colOffsets.length || rowFrom >= dims.rowOffsets.length ||
-        colTo >= dims.colOffsets.length || rowTo >= dims.rowOffsets.length) {
-      console.warn('行列索引超出范围:', { colFrom, rowFrom, colTo, rowTo, 
+    // 检查数组边界 - 添加容错处理
+    const maxCol = Math.max(colFrom, colTo);
+    const maxRow = Math.max(rowFrom, rowTo);
+    
+    if (maxCol >= dims.colOffsets.length || maxRow >= dims.rowOffsets.length) {
+      console.warn('行列索引超出范围，尝试容错处理:', { colFrom, rowFrom, colTo, rowTo, 
         colOffsetsLength: dims.colOffsets.length, rowOffsetsLength: dims.rowOffsets.length });
-      return null;
+      
+      // 容错：如果索引超出范围，使用最后一个有效偏移
+      const safeColFrom = Math.min(colFrom, dims.colOffsets.length - 1);
+      const safeRowFrom = Math.min(rowFrom, dims.rowOffsets.length - 1);
+      const safeColTo = Math.min(colTo, dims.colOffsets.length - 1);
+      const safeRowTo = Math.min(rowTo, dims.rowOffsets.length - 1);
+      
+      console.log('使用容错后的索引:', { safeColFrom, safeRowFrom, safeColTo, safeRowTo });
+      
+      // 使用容错后的索引继续处理
+      const colOffFrom = parseInt(from['xdr:colOff'] || 0, 10);
+      const rowOffFrom = parseInt(from['xdr:rowOff'] || 0, 10);
+      const colOffTo = parseInt(to['xdr:colOff'] || 0, 10);
+      const rowOffTo = parseInt(to['xdr:rowOff'] || 0, 10);
+
+      const x = (dims.colOffsets[safeColFrom] || 0) + (isNaN(colOffFrom) ? 0 : colOffFrom / EMU_PER_PIXEL);
+      const y = (dims.rowOffsets[safeRowFrom] || 0) + (isNaN(rowOffFrom) ? 0 : rowOffFrom / EMU_PER_PIXEL);
+      const w = ((dims.colOffsets[safeColTo] || 0) - (dims.colOffsets[safeColFrom] || 0)) + (isNaN(colOffTo) ? 0 : colOffTo / EMU_PER_PIXEL);
+      const h = ((dims.rowOffsets[safeRowTo] || 0) - (dims.rowOffsets[safeRowFrom] || 0)) + (isNaN(rowOffTo) ? 0 : rowOffTo / EMU_PER_PIXEL);
+
+      // 检查计算结果是否为有效数字
+      if (isNaN(x) || isNaN(y) || isNaN(w) || isNaN(h)) {
+        console.warn('容错计算结果包含NaN:', { x, y, w, h });
+        return null;
+      }
+
+      return { x, y, w, h };
     }
 
     const colOffFrom = parseInt(from['xdr:colOff'] || 0, 10);
@@ -426,15 +454,9 @@ async function parseDrawingML(zip, drawingPath, dims, opts = {}) {
       continue;
     }
 
-    // 图片
+    // 图片 - 跳过，由ExcelJS处理
     if (a['xdr:pic']) {
-      const blip = a['xdr:pic']['xdr:blipFill']['a:blip'];
-      const rId = blip['@_r:embed'];
-      const rel = Array.isArray(rels)
-        ? rels.find(r => r['@_Id'] === rId)
-        : rels;
-      const target = rel?.['@_Target'];
-      results.images.push({ rect, rId, target });
+      console.log('跳过DrawingML图片，由ExcelJS处理');
       continue;
     }
 
