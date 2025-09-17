@@ -6,7 +6,7 @@ import { toRichText } from 'tldraw';
  * 实现Excel布局到TLDraw画布的转换，保持相对距离和版式
  */
 export class ExcelToTLDrawConverter {
-  constructor(editor, scale = 1.2) {
+  constructor(editor, scale = 1) {
     this.editor = editor;
     this.scale = scale; // 整体缩放系数
     this.batchSize = 100; // 批量处理大小
@@ -179,8 +179,8 @@ export class ExcelToTLDrawConverter {
             console.log(`合并单元格 ${index}: 行${top}-${bottom}, 列${left}-${right}`);
             
             // 计算合并单元格的像素边界
-            const topLeft = this.getCellPixelBounds(top, left, worksheet);
-            const bottomRight = this.getCellPixelBounds(bottom + 1, right + 1, worksheet);
+            const topLeft = this.getCellPixelBoundsPrecise(top, left, worksheet);
+            const bottomRight = this.getCellPixelBoundsPrecise(bottom + 1, right + 1, worksheet);
             
             mergedCells.push({
               top,
@@ -940,7 +940,7 @@ export class ExcelToTLDrawConverter {
             const row = anchor.tl.row;
             const col = anchor.tl.col;
             
-            const cellBounds = this.getCellPixelBounds(row, col, worksheet);
+            const cellBounds = this.getCellPixelBoundsPrecise(row, col, worksheet);
             x = cellBounds.x;
             y = cellBounds.y;
             
@@ -951,26 +951,24 @@ export class ExcelToTLDrawConverter {
           let originalWidth = imageData.width || 100;
           let originalHeight = imageData.height || 100;
           
-          // 如果原始尺寸太小，尝试从Base64数据中获取真实尺寸
-          if (originalWidth < 50 || originalHeight < 50) {
-            try {
-              const testImg = new Image();
-              await new Promise((resolve, reject) => {
-                testImg.onload = () => {
-                  originalWidth = testImg.width;
-                  originalHeight = testImg.height;
-                  console.log('从Base64获取的真实图片尺寸:', originalWidth, 'x', originalHeight);
-                  resolve();
-                };
-                testImg.onerror = () => {
-                  console.warn('无法从Base64获取图片尺寸，使用默认值');
-                  resolve();
-                };
-                testImg.src = imageUrl;
-              });
-            } catch (error) {
-              console.warn('分析Base64图片尺寸失败:', error);
-            }
+          // 总是尝试从Base64数据中获取真实尺寸，因为ExcelJS的尺寸信息可能不准确
+          try {
+            const testImg = new Image();
+            await new Promise((resolve, reject) => {
+              testImg.onload = () => {
+                originalWidth = testImg.width;
+                originalHeight = testImg.height;
+                console.log('从Base64获取的真实图片尺寸:', originalWidth, 'x', originalHeight);
+                resolve();
+              };
+              testImg.onerror = () => {
+                console.warn('无法从Base64获取图片尺寸，使用默认值');
+                resolve();
+              };
+              testImg.src = imageUrl;
+            });
+          } catch (error) {
+            console.warn('分析Base64图片尺寸失败:', error);
           }
           
           // 如果没有通过锚点计算出显示尺寸，使用原始尺寸作为后备
@@ -1280,7 +1278,7 @@ export class ExcelToTLDrawConverter {
                     return;
                   }
                   
-                  const cellBounds = this.getCellPixelBounds(rowNumber, colNumber, worksheet);
+                  const cellBounds = this.getCellPixelBoundsPrecise(rowNumber, colNumber, worksheet);
                   console.log(`提取文字: "${cellText}" 在位置 ${rowNumber}-${colNumber}`);
                   
                   texts.push({
@@ -1538,7 +1536,7 @@ export class ExcelToTLDrawConverter {
                   });
                 } else {
                   processedCells.add(cellKey);
-                  const cellBounds = this.getCellPixelBounds(rowNumber, colNumber, worksheet);
+                  const cellBounds = this.getCellPixelBoundsPrecise(rowNumber, colNumber, worksheet);
                   
                   frames.push({
                     x: cellBounds.x,
@@ -1615,6 +1613,205 @@ export class ExcelToTLDrawConverter {
   }
 
   /**
+   * 工具：判断点是否在矩形内
+   * @param {number} px - 点的x坐标
+   * @param {number} py - 点的y坐标
+   * @param {Object} rect - 矩形对象 {x, y, width, height}
+   * @returns {boolean} 点是否在矩形内
+   */
+  _isPointInRect(px, py, rect) {
+    return px >= rect.x && px <= rect.x + rect.width && py >= rect.y && py <= rect.y + rect.height;
+  }
+
+  /**
+   * 工具：找图片所属容器（用中心点命中；若多命中，取面积最小的那个）
+   * @param {Array} frames - 框架数组
+   * @param {Object} img - 图片对象
+   * @returns {Object|null} 包含该图片的框架，如果没有则返回null
+   */
+  _findContainingFrame(frames, img) {
+    const cx = img.x + (img.width || img.originalWidth) / 2;
+    const cy = img.y + (img.height || img.originalHeight) / 2;
+    const hits = frames.filter(f => this._isPointInRect(cx, cy, f));
+    if (!hits.length) return null;
+    return hits.sort((a, b) => (a.width * a.height) - (b.width * b.height))[0];
+  }
+
+  /**
+   * 工具：找图片所属的所有容器（用于横跨多个格子的图片）
+   * @param {Array} frames - 框架数组
+   * @param {Object} img - 图片对象
+   * @returns {Array} 包含该图片的所有框架
+   */
+  _findAllContainingFrames(frames, img) {
+    const imgLeft = img.x;
+    const imgTop = img.y;
+    const imgRight = img.x + (img.width || img.originalWidth);
+    const imgBottom = img.y + (img.height || img.originalHeight);
+    
+    // 首先尝试找到完全包含图片的框架
+    const fullyContainingFrames = frames.filter(frame => {
+      const frameLeft = frame.x;
+      const frameTop = frame.y;
+      const frameRight = frame.x + frame.width;
+      const frameBottom = frame.y + frame.height;
+      
+      // 检查图片是否完全在框架内
+      return imgLeft >= frameLeft && imgRight <= frameRight && imgTop >= frameTop && imgBottom <= frameBottom;
+    });
+    
+    // 如果找到完全包含的框架，返回它们
+    if (fullyContainingFrames.length > 0) {
+      return fullyContainingFrames;
+    }
+    
+    // 如果没有完全包含的框架，检查图片中心点所在的框架
+    const imgCenterX = (imgLeft + imgRight) / 2;
+    const imgCenterY = (imgTop + imgBottom) / 2;
+    
+    const centerFrames = frames.filter(frame => {
+      return this._isPointInRect(imgCenterX, imgCenterY, frame);
+    });
+    
+    // 如果中心点在某个框架内，返回该框架
+    if (centerFrames.length > 0) {
+      // 返回面积最小的框架（最精确的匹配）
+      return [centerFrames.sort((a, b) => (a.width * a.height) - (b.width * b.height))[0]];
+    }
+    
+    // 最后回退到重叠检测，但只返回面积最小的重叠框架
+    const overlappingFrames = frames.filter(frame => {
+      const frameLeft = frame.x;
+      const frameTop = frame.y;
+      const frameRight = frame.x + frame.width;
+      const frameBottom = frame.y + frame.height;
+      
+      // 检查图片是否与框架有重叠
+      return !(imgRight <= frameLeft || imgLeft >= frameRight || imgBottom <= frameTop || imgTop >= frameBottom);
+    });
+    
+    // 返回面积最小的重叠框架
+    if (overlappingFrames.length > 0) {
+      return [overlappingFrames.sort((a, b) => (a.width * a.height) - (b.width * b.height))[0]];
+    }
+    
+    return [];
+  }
+
+  /**
+   * 工具：计算多个框架的合并边界
+   * @param {Array} frames - 框架数组
+   * @returns {Object} 合并后的边界 {x, y, width, height}
+   */
+  _calculateCombinedBounds(frames) {
+    if (frames.length === 0) return { x: 0, y: 0, width: 0, height: 0 };
+    if (frames.length === 1) return frames[0];
+    
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    
+    for (const frame of frames) {
+      minX = Math.min(minX, frame.x);
+      minY = Math.min(minY, frame.y);
+      maxX = Math.max(maxX, frame.x + frame.width);
+      maxY = Math.max(maxY, frame.y + frame.height);
+    }
+    
+    return {
+      x: minX,
+      y: minY,
+      width: maxX - minX,
+      height: maxY - minY
+    };
+  }
+
+  /**
+   * 核心：把图片 contain 到容器里，且不放大超过 100%
+   * @param {Array} images - 图片数组
+   * @param {Array} frames - 框架数组
+   * @param {number} padding - 内边距，默认8像素
+   */
+  _fitImagesIntoFrames(images, frames, padding = 0) {
+    console.log(`开始处理 ${images.length} 张图片，${frames.length} 个框架`);
+    
+    for (let i = 0; i < images.length; i++) {
+      const img = images[i];
+      // 原图像素
+      const ow = Math.max(1, img.originalWidth || img.width || 1);
+      const oh = Math.max(1, img.originalHeight || img.height || 1);
+
+      console.log(`处理图片 ${i + 1}: 原始尺寸 ${ow}x${oh}, 当前位置 (${img.x}, ${img.y}), 当前尺寸 ${img.width}x${img.height}`);
+
+      // 查找所有包含此图片的框架（可能横跨多个格子）
+      const containingFrames = this._findAllContainingFrames(frames, img);
+      
+      if (containingFrames.length === 0) {
+        console.log(`图片 ${i + 1}: 未找到包含的框架，跳过`);
+        continue;
+      }
+
+      // 如果图片横跨多个框架，计算合并后的边界
+      const combinedBounds = this._calculateCombinedBounds(containingFrames);
+      console.log(`图片 ${i + 1}: 找到 ${containingFrames.length} 个框架，合并边界: ${combinedBounds.width}x${combinedBounds.height}, 位置 (${combinedBounds.x}, ${combinedBounds.y})`);
+
+      const maxW = Math.max(0, combinedBounds.width - padding * 2);
+      const maxH = Math.max(0, combinedBounds.height - padding * 2);
+
+      // 检查是否为横幅图片（横跨多个格子且尺寸较大）
+      const excelBoxW = img.width || ow;
+      const excelBoxH = img.height || oh;
+      // 更严格的横幅检测：必须横跨多个格子 且 图片尺寸明显大于单个格子
+      const isBanner = containingFrames.length > 1 && 
+                      (excelBoxW > maxW * 1.5 || excelBoxH > maxH * 1.5) &&
+                      (excelBoxW > 200 || excelBoxH > 200); // 绝对尺寸也要足够大
+      
+      console.log(`图片 ${i + 1}: Excel尺寸 ${excelBoxW}x${excelBoxH}, 合并容器最大尺寸 ${maxW}x${maxH}, 是否为横幅: ${isBanner}`);
+      
+      if (isBanner) {
+        // 横幅图片：保持原始Excel尺寸，但确保不超出合并边界
+        const scaleX = maxW / excelBoxW;
+        const scaleY = maxH / excelBoxH;
+        const scale = Math.min(scaleX, scaleY, 1); // 不超过100%原图像素
+        
+        const dw = Math.round(excelBoxW * scale);
+        const dh = Math.round(excelBoxH * scale);
+        
+        // 在合并边界内居中
+        const nx = combinedBounds.x + (combinedBounds.width - dw) / 2;
+        const ny = combinedBounds.y + (combinedBounds.height - dh) / 2;
+        
+        console.log(`图片 ${i + 1}: 横幅处理 - 缩放比例 ${scale}, 新尺寸 ${dw}x${dh}, 新位置 (${nx}, ${ny})`);
+        
+        img.x = Math.round(nx);
+        img.y = Math.round(ny);
+        img.width = Math.round(dw);
+        img.height = Math.round(dh);
+      } else {
+        // 单格子图片：使用原来的逻辑
+        const s = Math.min(maxW / ow, maxH / oh, 1);
+        const dw = Math.round(ow * s);
+        const dh = Math.round(oh * s);
+
+        // 居中
+        const nx = combinedBounds.x + (combinedBounds.width - dw) / 2;
+        const ny = combinedBounds.y + (combinedBounds.height - dh) / 2;
+
+        // 边界检查：确保图片边框不超出合并边界
+        const finalX = Math.max(combinedBounds.x + padding, Math.min(nx, combinedBounds.x + combinedBounds.width - dw - padding));
+        const finalY = Math.max(combinedBounds.y + padding, Math.min(ny, combinedBounds.y + combinedBounds.height - dh - padding));
+
+        console.log(`图片 ${i + 1}: 单格子处理 - 缩放比例 ${s}, 新尺寸 ${dw}x${dh}, 计算位置 (${nx}, ${ny}), 最终位置 (${finalX}, ${finalY})`);
+
+        img.x = Math.round(finalX);
+        img.y = Math.round(finalY);
+        img.width = Math.round(dw);
+        img.height = Math.round(dh);
+      }
+    }
+    
+    console.log('图片尺寸调整完成');
+  }
+
+  /**
    * 批量创建TLDraw形状
    * @param {Array} elements - 元素数组
    * @param {string} shapeType - 形状类型
@@ -1651,16 +1848,16 @@ export class ExcelToTLDrawConverter {
                 }
               ]);
               
-              // 创建图片形状 - 使用计算出的显示尺寸
-              console.log(`创建图片形状: 显示尺寸(${element.width}x${element.height}), 位置(${element.x * this.scale}, ${element.y * this.scale})`);
+              // 创建图片形状 - 使用计算出的显示尺寸，统一应用缩放
+              console.log(`创建图片形状: 显示尺寸(${element.width}x${element.height}), 位置(${element.x}, ${element.y})`);
               
               shape = {
                 type: 'image',
                 x: element.x * this.scale,
                 y: element.y * this.scale,
                 props: {
-                  w: element.width * this.scale,   // 使用计算出的显示宽度
-                  h: element.height * this.scale,  // 使用计算出的显示高度
+                  w: element.width * this.scale,   // 统一应用缩放
+                  h: element.height * this.scale,  // 统一应用缩放
                   assetId: assetId
                 }
               };
@@ -1804,6 +2001,11 @@ export class ExcelToTLDrawConverter {
       const adjustedImages = images;  // 直接使用原始图片位置
       const adjustedTexts = texts;    // 直接使用原始文字位置
       const adjustedFrames = frames;  // 直接使用原始框架位置
+      
+      // 6.5. 先按容器把图片做"等比缩小且不放大"的自适应
+      console.log('开始调整图片尺寸以适应容器...');
+      this._fitImagesIntoFrames(adjustedImages, adjustedFrames, 0);
+      console.log('图片尺寸调整完成');
       
       // 7. 批量创建形状
       console.log('开始创建TLDraw形状...');
