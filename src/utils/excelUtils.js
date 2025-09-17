@@ -1630,6 +1630,120 @@ export class ExcelToTLDrawConverter {
   }
 
   /**
+   * 解析Excel单元格颜色
+   * @param {Object} color - ExcelJS颜色对象
+   * @returns {string} 十六进制颜色值
+   */
+  parseExcelColor(color) {
+    if (!color) return '#FFFFFF';
+    
+    if (color.argb) {
+      // ARGB格式：AARRGGBB
+      const argb = color.argb.toString(16).padStart(8, '0');
+      return `#${argb.substr(2)}`; // 去掉Alpha通道
+    }
+    
+    if (color.theme !== undefined) {
+      // 主题色，使用默认主题色映射
+      const themeColors = {
+        0: '#FFFFFF', // light1
+        1: '#000000', // dark1
+        2: '#E7E6E6', // light2
+        3: '#44546A', // dark2
+        4: '#5B9BD5', // accent1
+        5: '#ED7D31', // accent2
+        6: '#A5A5A5', // accent3
+        7: '#FFC000', // accent4
+        8: '#4472C4', // accent5
+        9: '#70AD47'  // accent6
+      };
+      return themeColors[color.theme] || '#FFFFFF';
+    }
+    
+    return '#FFFFFF';
+  }
+
+  /**
+   * 提取单元格背景色
+   * @param {Object} worksheet - Excel工作表
+   * @param {Array} mergedCells - 合并单元格数组
+   * @returns {Array} 背景色信息数组
+   */
+  extractCellBackgrounds(worksheet, mergedCells) {
+    const backgrounds = [];
+    const processedCells = new Set();
+    
+    try {
+      worksheet.eachRow((row, rowNumber) => {
+        try {
+          row.eachCell((cell, colNumber) => {
+            try {
+              const cellKey = `${rowNumber}-${colNumber}`;
+              
+              if (processedCells.has(cellKey)) {
+                return;
+              }
+              
+              // 检查是否有背景色
+              if (cell.fill && cell.fill.type === 'pattern' && cell.fill.pattern === 'solid') {
+                const fillColor = this.parseExcelColor(cell.fill.fgColor);
+                
+                // 检查是否在合并单元格内
+                const mergedCell = this.isInMergedCell(rowNumber, colNumber, mergedCells);
+                
+                if (mergedCell) {
+                  const mergedCellKey = `${mergedCell.top}-${mergedCell.left}`;
+                  if (processedCells.has(mergedCellKey)) {
+                    return;
+                  }
+                  processedCells.add(mergedCellKey);
+                  
+                  // 标记合并单元格范围内的所有单元格为已处理
+                  for (let r = mergedCell.top; r <= mergedCell.bottom; r++) {
+                    for (let c = mergedCell.left; c <= mergedCell.right; c++) {
+                      const cellKey = `${r}-${c}`;
+                      processedCells.add(cellKey);
+                    }
+                  }
+                  
+                  backgrounds.push({
+                    x: mergedCell.x,
+                    y: mergedCell.y,
+                    width: mergedCell.width,
+                    height: mergedCell.height,
+                    color: fillColor,
+                    type: 'background'
+                  });
+                } else {
+                  processedCells.add(cellKey);
+                  const cellBounds = this.getCellPixelBoundsPrecise(rowNumber, colNumber, worksheet);
+                  
+                  backgrounds.push({
+                    x: cellBounds.x,
+                    y: cellBounds.y,
+                    width: cellBounds.width,
+                    height: cellBounds.height,
+                    color: fillColor,
+                    type: 'background'
+                  });
+                }
+              }
+            } catch (error) {
+              console.warn(`处理单元格背景 ${rowNumber}-${colNumber} 失败:`, error);
+            }
+          });
+        } catch (error) {
+          console.warn(`处理行背景 ${rowNumber} 失败:`, error);
+        }
+      });
+    } catch (error) {
+      console.warn('提取单元格背景失败:', error);
+    }
+    
+    return backgrounds;
+  }
+
+  /**
    * 提取表格框架
    * @param {Object} worksheet - Excel工作表
    * @param {Array} mergedCells - 合并单元格数组
@@ -2090,17 +2204,59 @@ export class ExcelToTLDrawConverter {
               continue;
             }
             
-            shape = {
-              type: 'text',
-              x: textX,
-              y: textY,
-              props: {
-                richText: toRichText(element.text),
-                w: textW,
-                size: 's',
-                color: 'black'
-              }
-            };
+            // 检查是否有样式信息（来自DrawingML）
+            const hasStyle = element.fill || element.stroke;
+            
+            if (hasStyle && element.type === 'textbox') {
+              // 创建带样式的文本框（使用geo形状）
+              shape = {
+                type: 'geo',
+                x: textX,
+                y: textY,
+                props: {
+                  geo: 'rectangle',
+                  w: textW,
+                  h: element.height * this.scale,
+                  fill: element.fill?.fill === 'solid' ? 'solid' : 'none',
+                  fillColor: element.fill?.color || '#FFFFFF',
+                  stroke: element.stroke?.stroke === 'solid' ? 'solid' : 'none',
+                  strokeColor: element.stroke?.color || '#000000',
+                  strokeWidth: element.stroke?.width || 1,
+                  opacity: element.fill?.opacity || 1
+                }
+              };
+              
+              // 在形状上添加文字
+              const textShape = {
+                type: 'text',
+                x: textX + 4, // 稍微偏移避免贴边
+                y: textY + 4,
+                props: {
+                  richText: toRichText(element.text),
+                  w: textW - 8,
+                  size: 's',
+                  color: 'black'
+                }
+              };
+              
+              // 先创建背景形状，再创建文字
+              shapes.push(shape);
+              shapes.push(textShape);
+              continue;
+            } else {
+              // 普通文字（无样式）
+              shape = {
+                type: 'text',
+                x: textX,
+                y: textY,
+                props: {
+                  richText: toRichText(element.text),
+                  w: textW,
+                  size: 's',
+                  color: 'black'
+                }
+              };
+            }
             break;
             
           case 'frame':
@@ -2134,6 +2290,41 @@ export class ExcelToTLDrawConverter {
                 fill: 'none',
                 color: 'black',
                 size: 's'
+              }
+            };
+            break;
+            
+          case 'background':
+            // 验证背景坐标和尺寸
+            const bgX = element.x * this.scale;
+            const bgY = element.y * this.scale;
+            const bgW = element.width * this.scale;
+            const bgH = element.height * this.scale;
+            
+            if (isNaN(bgX) || isNaN(bgY) || isNaN(bgW) || isNaN(bgH)) {
+              console.warn('背景元素坐标无效，跳过:', { 
+                element, 
+                bgX, 
+                bgY, 
+                bgW, 
+                bgH,
+                scale: this.scale 
+              });
+              continue;
+            }
+            
+            shape = {
+              type: 'geo',
+              x: bgX,
+              y: bgY,
+              props: {
+                geo: 'rectangle',
+                w: bgW,
+                h: bgH,
+                fill: 'solid',
+                fillColor: element.color,
+                stroke: 'none',
+                strokeWidth: 0
               }
             };
             break;
@@ -2278,7 +2469,12 @@ export class ExcelToTLDrawConverter {
       allTexts.length = 0; // 清空原数组
       allTexts.push(...uniqueTexts); // 使用去重后的数组
       
-      // 4. 提取表格框架
+      // 4. 提取单元格背景色
+      console.log('开始提取单元格背景色...');
+      const backgrounds = this.extractCellBackgrounds(worksheet, mergedCells);
+      console.log('提取到背景色数量:', backgrounds.length);
+      
+      // 5. 提取表格框架
       console.log('开始提取表格框架...');
       const frames = this.extractFrames(worksheet, mergedCells);
       console.log('提取到框架数量:', frames.length);
@@ -2302,22 +2498,16 @@ export class ExcelToTLDrawConverter {
       this._fitImagesIntoFrames(adjustedImages, adjustedFrames, 0);
       console.log('图片尺寸调整完成');
       
-      // 7. 批量创建形状
+      // 7. 批量创建形状（按正确层级顺序）
       console.log('开始创建TLDraw形状...');
       
-      // 先创建图片
-      if (adjustedImages.length > 0) {
-        console.log('开始创建图片形状...');
-        await this.createShapesBatch(adjustedImages, 'image');
+      // 1. 先创建背景色（最底层）
+      if (backgrounds.length > 0) {
+        console.log('开始创建背景色形状...');
+        await this.createShapesBatch(backgrounds, 'background');
       }
       
-      // 再创建文字
-      if (adjustedTexts.length > 0) {
-        console.log('开始创建文字形状...');
-        await this.createShapesBatch(adjustedTexts, 'text');
-      }
-      
-      // 最后创建表格框（使用矩形框）
+      // 2. 创建表格框
       if (adjustedFrames.length > 0) {
         console.log('开始创建表格框形状...');
         try {
@@ -2325,6 +2515,18 @@ export class ExcelToTLDrawConverter {
         } catch (frameError) {
           console.warn('表格框创建失败，但不影响其他内容:', frameError);
         }
+      }
+      
+      // 3. 创建图片
+      if (adjustedImages.length > 0) {
+        console.log('开始创建图片形状...');
+        await this.createShapesBatch(adjustedImages, 'image');
+      }
+      
+      // 4. 最后创建文字（最上层）
+      if (adjustedTexts.length > 0) {
+        console.log('开始创建文字形状...');
+        await this.createShapesBatch(adjustedTexts, 'text');
       }
       
       // 7. 调整视图
@@ -2345,18 +2547,19 @@ export class ExcelToTLDrawConverter {
       }
       
       console.log('Excel转换完成！');
-      console.log(`创建了 ${frames.length} 个表格框, ${images.length} 个图片, ${allTexts.length} 个文字`);
+      console.log(`创建了 ${backgrounds.length} 个背景色, ${frames.length} 个表格框, ${images.length} 个图片, ${allTexts.length} 个文字`);
       
       return {
         success: true,
         stats: {
+          backgrounds: backgrounds.length,
           frames: frames.length, // 使用矩形框代替frame
           images: images.length,
           texts: allTexts.length,
           cellTexts: cellTexts.length,
           drawingMLTexts: drawingMLElements.texts.length,
           mergedCells: mergedCells.length,
-          note: '使用矩形框绘制表格边框，包含DrawingML文本框'
+          note: '包含DrawingML样式解析、单元格背景色、表格边框和文本框'
         }
       };
       

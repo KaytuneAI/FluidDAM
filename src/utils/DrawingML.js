@@ -7,12 +7,194 @@ import { XMLParser } from 'fast-xml-parser';
 
 // EMU → 像素换算 (1 px = 9525 EMU at 96dpi)
 const EMU_PER_PIXEL = 9525;
+const EMU_PER_INCH = 914400;
+const PX_PER_INCH = 96;
 
 function emuToPx(value) {
   if (isNaN(value) || value === null || value === undefined) {
     return 0;
   }
   return Math.round(value / EMU_PER_PIXEL);
+}
+
+// 默认主题色（如果无法解析theme1.xml时使用）
+const DEFAULT_THEME_COLORS = {
+  'accent1': '#5B9BD5',
+  'accent2': '#ED7D31', 
+  'accent3': '#A5A5A5',
+  'accent4': '#FFC000',
+  'accent5': '#4472C4',
+  'accent6': '#70AD47',
+  'dark1': '#000000',
+  'dark2': '#44546A',
+  'light1': '#FFFFFF',
+  'light2': '#E7E6E6',
+  'tx1': '#000000',
+  'tx2': '#44546A',
+  'bg1': '#FFFFFF',
+  'bg2': '#E7E6E6'
+};
+
+/**
+ * 解析DrawingML的填充样式
+ * @param {Object} spPr - 形状属性节点
+ * @param {Object} theme - 主题色对象
+ * @returns {Object} { fill: 'solid'|'none', color: '#rrggbb', opacity: 0-1 }
+ */
+function parseFillStyle(spPr, theme = {}) {
+  if (!spPr) return { fill: 'none', color: '#FFFFFF', opacity: 1 };
+  
+  // 检查填充类型
+  if (spPr['a:noFill']) {
+    return { fill: 'none', color: '#FFFFFF', opacity: 0 };
+  }
+  
+  if (spPr['a:solidFill']) {
+    return parseSolidFill(spPr['a:solidFill'], theme);
+  }
+  
+  if (spPr['a:gradFill']) {
+    // 渐变填充，取第一个颜色作为主色
+    const gradFill = spPr['a:gradFill'];
+    if (gradFill['a:gsLst'] && gradFill['a:gsLst']['a:gs']) {
+      const firstGs = Array.isArray(gradFill['a:gsLst']['a:gs']) 
+        ? gradFill['a:gsLst']['a:gs'][0] 
+        : gradFill['a:gsLst']['a:gs'];
+      if (firstGs['a:srgbClr'] || firstGs['a:schemeClr']) {
+        return parseSolidFill(firstGs, theme);
+      }
+    }
+  }
+  
+  if (spPr['a:blipFill']) {
+    // 图片填充，使用默认背景色
+    return { fill: 'solid', color: '#F0F0F0', opacity: 1 };
+  }
+  
+  return { fill: 'none', color: '#FFFFFF', opacity: 1 };
+}
+
+/**
+ * 解析DrawingML的描边样式
+ * @param {Object} spPr - 形状属性节点
+ * @param {Object} theme - 主题色对象
+ * @returns {Object} { stroke: 'solid'|'none', color: '#rrggbb', width: number }
+ */
+function parseStrokeStyle(spPr, theme = {}) {
+  if (!spPr || !spPr['a:ln']) {
+    return { stroke: 'none', color: '#000000', width: 0 };
+  }
+  
+  const line = spPr['a:ln'];
+  const width = line['@_w'] ? emuToPx(parseInt(line['@_w'], 10)) : 1;
+  
+  if (line['a:noFill']) {
+    return { stroke: 'none', color: '#000000', width: 0 };
+  }
+  
+  if (line['a:solidFill']) {
+    const fillStyle = parseSolidFill(line['a:solidFill'], theme);
+    return { 
+      stroke: 'solid', 
+      color: fillStyle.color, 
+      width: Math.max(1, width)
+    };
+  }
+  
+  return { stroke: 'solid', color: '#000000', width: Math.max(1, width) };
+}
+
+/**
+ * 解析DrawingML的实心填充
+ * @param {Object} solidFill - a:solidFill节点
+ * @param {Object} theme - 主题色对象
+ * @returns {Object} { fill: 'solid', color: '#rrggbb', opacity: 0-1 }
+ */
+function parseSolidFill(solidFill, theme = {}) {
+  if (!solidFill) return { fill: 'solid', color: '#FFFFFF', opacity: 1 };
+  
+  let color = '#FFFFFF';
+  let opacity = 1;
+  
+  // 检查颜色类型
+  if (solidFill['a:srgbClr']) {
+    const srgb = solidFill['a:srgbClr'];
+    color = `#${srgb['@_val'] || 'FFFFFF'}`;
+    
+    // 检查透明度
+    if (srgb['a:alpha']) {
+      opacity = parseInt(srgb['a:alpha']['@_val'] || '100000', 10) / 100000;
+    }
+  } else if (solidFill['a:schemeClr']) {
+    const scheme = solidFill['a:schemeClr'];
+    const schemeName = scheme['@_val'];
+    
+    // 获取主题色
+    const baseColor = theme[schemeName] || DEFAULT_THEME_COLORS[schemeName] || '#FFFFFF';
+    color = applyColorTransforms(baseColor, scheme);
+    
+    // 检查透明度
+    if (scheme['a:alpha']) {
+      opacity = parseInt(scheme['a:alpha']['@_val'] || '100000', 10) / 100000;
+    }
+  }
+  
+  return { fill: 'solid', color, opacity };
+}
+
+/**
+ * 应用颜色变换（tint/shade/lumMod/lumOff）
+ * @param {string} baseColor - 基础颜色 #rrggbb
+ * @param {Object} schemeNode - schemeClr节点
+ * @returns {string} 变换后的颜色 #rrggbb
+ */
+function applyColorTransforms(baseColor, schemeNode) {
+  if (!schemeNode) return baseColor;
+  
+  // 简化的颜色变换实现
+  // 实际项目中可以使用更精确的HSL变换
+  
+  let color = baseColor;
+  
+  // 处理tint（向白色靠拢）
+  if (schemeNode['a:tint']) {
+    const tint = parseInt(schemeNode['a:tint']['@_val'] || '0', 10) / 100000;
+    color = blendColors(color, '#FFFFFF', tint);
+  }
+  
+  // 处理shade（向黑色靠拢）
+  if (schemeNode['a:shade']) {
+    const shade = parseInt(schemeNode['a:shade']['@_val'] || '0', 10) / 100000;
+    color = blendColors(color, '#000000', shade);
+  }
+  
+  return color;
+}
+
+/**
+ * 颜色混合（简化实现）
+ * @param {string} color1 - 颜色1 #rrggbb
+ * @param {string} color2 - 颜色2 #rrggbb  
+ * @param {number} ratio - 混合比例 0-1
+ * @returns {string} 混合后的颜色 #rrggbb
+ */
+function blendColors(color1, color2, ratio) {
+  const hex1 = color1.replace('#', '');
+  const hex2 = color2.replace('#', '');
+  
+  const r1 = parseInt(hex1.substr(0, 2), 16);
+  const g1 = parseInt(hex1.substr(2, 2), 16);
+  const b1 = parseInt(hex1.substr(4, 2), 16);
+  
+  const r2 = parseInt(hex2.substr(0, 2), 16);
+  const g2 = parseInt(hex2.substr(2, 2), 16);
+  const b2 = parseInt(hex2.substr(4, 2), 16);
+  
+  const r = Math.round(r1 + (r2 - r1) * ratio);
+  const g = Math.round(g1 + (g2 - g1) * ratio);
+  const b = Math.round(b1 + (b2 - b1) * ratio);
+  
+  return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
 }
 
 /**
@@ -258,12 +440,31 @@ async function parseDrawingML(zip, drawingPath, dims, opts = {}) {
 
     // 文本框
     if (a['xdr:sp']) {
-      const text = extractPlainText(a['xdr:sp']);
+      const sp = a['xdr:sp'];
+      const text = extractPlainText(sp);
+      const spPr = sp['xdr:spPr'];
+      
+      // 解析样式
+      const fillStyle = parseFillStyle(spPr, opts.theme || {});
+      const strokeStyle = parseStrokeStyle(spPr, opts.theme || {});
+      
       if (text) {
-        results.texts.push({ rect, text });
+        results.texts.push({ 
+          rect, 
+          text, 
+          fill: fillStyle,
+          stroke: strokeStyle,
+          type: 'textbox'
+        });
       } else {
         // 没有文字内容的形状，但仍然可见
-        results.shapes.push({ rect, kind: 'shape' });
+        results.shapes.push({ 
+          rect, 
+          kind: 'shape',
+          fill: fillStyle,
+          stroke: strokeStyle,
+          type: 'shape'
+        });
       }
       continue;
     }
@@ -288,5 +489,10 @@ async function parseDrawingML(zip, drawingPath, dims, opts = {}) {
 export default {
   parseDrawingML,
   anchorToPixels,
-  extractPlainText
+  extractPlainText,
+  parseFillStyle,
+  parseStrokeStyle,
+  parseSolidFill,
+  applyColorTransforms,
+  blendColors
 };
