@@ -744,17 +744,6 @@ export class ExcelToTLDrawConverter {
             imageId = `image_${Math.random().toString(36).substr(2, 9)}`;
           }
           
-          // 检查是否已经处理过这张图片（包含位置信息）
-          const tl = image.range?.tl || {};
-          const br = image.range?.br || {};
-          const key = `${imageData.imageId ?? imageId}@${tl.row},${tl.col},${br.row ?? ''},${br.col ?? ''}`;
-          
-          if (processedImages.has(key)) {
-            console.log('跳过重复的图片:', key);
-            continue;
-          }
-          processedImages.add(key);
-          
           console.log('处理图片:', image, 'ID:', imageId);
           
           // 获取图片数据
@@ -771,6 +760,17 @@ export class ExcelToTLDrawConverter {
             console.warn('图片数据为空:', image);
             continue;
           }
+          
+          // 检查是否已经处理过这张图片（包含位置信息）
+          const tl = image.range?.tl || {};
+          const br = image.range?.br || {};
+          const key = `${imageData.imageId ?? imageId}@${tl.row},${tl.col},${br.row ?? ''},${br.col ?? ''}`;
+          
+          if (processedImages.has(key)) {
+            console.log('跳过重复的图片:', key);
+            continue;
+          }
+          processedImages.add(key);
           
           // 详细调试图片数据
           console.log('图片数据类型:', typeof imageData);
