@@ -1638,6 +1638,24 @@ export class ExcelToTLDrawConverter {
   }
 
   /**
+   * 工具：计算两个矩形的重叠面积
+   * @param {Object} rect1 - 矩形1 {x, y, width, height}
+   * @param {Object} rect2 - 矩形2 {x, y, width, height}
+   * @returns {number} 重叠面积
+   */
+  _calculateOverlapArea(rect1, rect2) {
+    const left = Math.max(rect1.x, rect2.x);
+    const top = Math.max(rect1.y, rect2.y);
+    const right = Math.min(rect1.x + rect1.width, rect2.x + rect2.width);
+    const bottom = Math.min(rect1.y + rect1.height, rect2.y + rect2.height);
+    
+    if (left < right && top < bottom) {
+      return (right - left) * (bottom - top);
+    }
+    return 0;
+  }
+
+  /**
    * 工具：找图片所属的所有容器（用于横跨多个格子的图片）
    * @param {Array} frames - 框架数组
    * @param {Object} img - 图片对象
@@ -1648,6 +1666,7 @@ export class ExcelToTLDrawConverter {
     const imgTop = img.y;
     const imgRight = img.x + (img.width || img.originalWidth);
     const imgBottom = img.y + (img.height || img.originalHeight);
+    const imgArea = (imgRight - imgLeft) * (imgBottom - imgTop);
     
     // 首先尝试找到完全包含图片的框架
     const fullyContainingFrames = frames.filter(frame => {
@@ -1665,7 +1684,23 @@ export class ExcelToTLDrawConverter {
       return fullyContainingFrames;
     }
     
-    // 如果没有完全包含的框架，检查图片中心点所在的框架
+    // 检查90%重叠的框架
+    const highOverlapFrames = frames.filter(frame => {
+      const overlapArea = this._calculateOverlapArea(
+        { x: imgLeft, y: imgTop, width: imgRight - imgLeft, height: imgBottom - imgTop },
+        { x: frame.x, y: frame.y, width: frame.width, height: frame.height }
+      );
+      
+      // 如果重叠面积超过图片面积的90%，认为图片在这个框架内
+      return overlapArea >= imgArea * 0.9;
+    });
+    
+    // 如果找到90%重叠的框架，返回它们
+    if (highOverlapFrames.length > 0) {
+      return highOverlapFrames;
+    }
+    
+    // 如果没有完全包含或90%重叠的框架，检查图片中心点所在的框架
     const imgCenterX = (imgLeft + imgRight) / 2;
     const imgCenterY = (imgTop + imgBottom) / 2;
     
@@ -1745,7 +1780,12 @@ export class ExcelToTLDrawConverter {
       const containingFrames = this._findAllContainingFrames(frames, img);
       
       if (containingFrames.length === 0) {
-        console.log(`图片 ${i + 1}: 未找到包含的框架，跳过`);
+        console.log(`图片 ${i + 1}: 未找到包含的框架，保持原始位置和尺寸`);
+        // 不在任何格子内的图片，保持原始位置和尺寸，只应用缩放
+        img.x = Math.round(img.x);
+        img.y = Math.round(img.y);
+        img.width = Math.round(img.width);
+        img.height = Math.round(img.height);
         continue;
       }
 
