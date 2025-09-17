@@ -1,5 +1,7 @@
 import * as ExcelJS from 'exceljs';
 import { toRichText } from 'tldraw';
+import JSZip from 'jszip';
+import DrawingML from './DrawingML';
 
 /**
  * Excel到TLDraw转换工具类
@@ -30,6 +32,34 @@ export class ExcelToTLDrawConverter {
     // Excel列宽近似换算公式（Calibri 11下较稳）
     // 改进：使用更精确的换算，考虑不同字体和缩放
     return Math.floor((width + 0.12) * 7);
+  }
+
+  /**
+   * 计算行列偏移量数组，用于DrawingML解析
+   * @param {Object} worksheet - Excel工作表
+   * @returns {Object} { colOffsets: [], rowOffsets: [] }
+   */
+  calculateOffsets(worksheet) {
+    const colOffsets = [0]; // 第0列偏移为0
+    const rowOffsets = [0]; // 第0行偏移为0
+    
+    // 计算列偏移量
+    for (let col = 1; col <= (worksheet.columnCount || 50); col++) {
+      const colObj = worksheet.getColumn(col);
+      const colWidth = (colObj && colObj.width) ? colObj.width : 8.43;
+      const prevOffset = colOffsets[colOffsets.length - 1];
+      colOffsets.push(prevOffset + this.columnWidthToPx(colWidth));
+    }
+    
+    // 计算行偏移量
+    for (let row = 1; row <= (worksheet.rowCount || 100); row++) {
+      const rowObj = worksheet.getRow(row);
+      const rowHeight = (rowObj && rowObj.height) ? rowObj.height : 15;
+      const prevOffset = rowOffsets[rowOffsets.length - 1];
+      rowOffsets.push(prevOffset + this.pointsToPx(rowHeight));
+    }
+    
+    return { colOffsets, rowOffsets };
   }
 
   /**
@@ -491,6 +521,105 @@ export class ExcelToTLDrawConverter {
       avgWidthRatio,
       avgHeightRatio
     };
+  }
+
+  /**
+   * 使用DrawingML解析器提取文本框和图片
+   * @param {Object} worksheet - Excel工作表
+   * @param {JSZip} zip - Excel文件的zip对象
+   * @returns {Object} { texts: [], images: [] }
+   */
+  async extractDrawingMLElements(worksheet, zip) {
+    const drawingTexts = [];
+    const drawingImages = [];
+    
+    try {
+      console.log('开始使用DrawingML解析器提取元素...');
+      
+      // 计算行列偏移量
+      const dims = this.calculateOffsets(worksheet);
+      console.log('计算的行列偏移量:', dims);
+      
+      // 查找drawing文件
+      const drawingFiles = [];
+      for (const fileName of Object.keys(zip.files)) {
+        if (fileName.startsWith('xl/drawings/drawing') && fileName.endsWith('.xml')) {
+          drawingFiles.push(fileName);
+        }
+      }
+      
+      console.log('找到的drawing文件:', drawingFiles);
+      
+      // 解析每个drawing文件
+      for (const drawingPath of drawingFiles) {
+        try {
+          console.log(`解析drawing文件: ${drawingPath}`);
+          const drawingResults = await DrawingML.parseDrawingML(zip, drawingPath, dims);
+          
+          console.log(`从${drawingPath}解析到:`, drawingResults);
+          
+          // 处理文本框
+          if (drawingResults.texts && drawingResults.texts.length > 0) {
+            for (const textItem of drawingResults.texts) {
+              if (textItem.text && textItem.text.trim()) {
+                drawingTexts.push({
+                  text: textItem.text.trim(),
+                  x: textItem.rect.x,
+                  y: textItem.rect.y,
+                  width: textItem.rect.w,
+                  height: textItem.rect.h,
+                  type: 'text',
+                  source: 'drawingml'
+                });
+                console.log(`添加DrawingML文本框: "${textItem.text.trim()}" 位置(${textItem.rect.x}, ${textItem.rect.y})`);
+              }
+            }
+          }
+          
+          // 处理图片
+          if (drawingResults.images && drawingResults.images.length > 0) {
+            for (const imageItem of drawingResults.images) {
+              // 从workbook获取图片数据
+              try {
+                const workbook = worksheet._workbook;
+                let imageData = null;
+                
+                // 尝试通过rId获取图片
+                if (imageItem.rId && workbook) {
+                  // 这里需要根据实际的ExcelJS API来获取图片
+                  // 可能需要遍历workbook的图片集合
+                  console.log(`尝试获取图片数据，rId: ${imageItem.rId}`);
+                  
+                  // 暂时创建一个占位符，实际实现需要根据ExcelJS的API调整
+                  drawingImages.push({
+                    url: null, // 需要从workbook获取
+                    x: imageItem.rect.x,
+                    y: imageItem.rect.y,
+                    width: imageItem.rect.w,
+                    height: imageItem.rect.h,
+                    type: 'image',
+                    source: 'drawingml',
+                    rId: imageItem.rId,
+                    target: imageItem.target
+                  });
+                }
+              } catch (error) {
+                console.warn('处理DrawingML图片失败:', error);
+              }
+            }
+          }
+          
+        } catch (error) {
+          console.warn(`解析drawing文件${drawingPath}失败:`, error);
+        }
+      }
+      
+    } catch (error) {
+      console.warn('DrawingML解析失败:', error);
+    }
+    
+    console.log(`DrawingML解析完成: ${drawingTexts.length}个文本框, ${drawingImages.length}个图片`);
+    return { texts: drawingTexts, images: drawingImages };
   }
 
   /**
@@ -1684,45 +1813,53 @@ export class ExcelToTLDrawConverter {
       return fullyContainingFrames;
     }
     
-    // 检查90%重叠的框架
+    // 检查高重叠的框架，使用平衡的标准
     const highOverlapFrames = frames.filter(frame => {
       const overlapArea = this._calculateOverlapArea(
         { x: imgLeft, y: imgTop, width: imgRight - imgLeft, height: imgBottom - imgTop },
         { x: frame.x, y: frame.y, width: frame.width, height: frame.height }
       );
       
-      // 如果重叠面积超过图片面积的90%，认为图片在这个框架内
-      return overlapArea >= imgArea * 0.9;
+      // 平衡的标准：重叠面积超过图片面积的70%，或者重叠面积超过框架面积的40%
+      const frameArea = frame.width * frame.height;
+      return overlapArea >= imgArea * 0.7 || overlapArea >= frameArea * 0.4;
     });
     
-    // 如果找到90%重叠的框架，返回它们
+    // 如果找到高重叠的框架，返回它们
     if (highOverlapFrames.length > 0) {
       return highOverlapFrames;
     }
     
-    // 如果没有完全包含或90%重叠的框架，检查图片中心点所在的框架
+    // 如果没有完全包含或高重叠的框架，检查图片中心点所在的框架
     const imgCenterX = (imgLeft + imgRight) / 2;
     const imgCenterY = (imgTop + imgBottom) / 2;
     
     const centerFrames = frames.filter(frame => {
-      return this._isPointInRect(imgCenterX, imgCenterY, frame);
+      // 中心点检测也需要检查重叠面积，避免误判
+      const overlapArea = this._calculateOverlapArea(
+        { x: imgLeft, y: imgTop, width: imgRight - imgLeft, height: imgBottom - imgTop },
+        { x: frame.x, y: frame.y, width: frame.width, height: frame.height }
+      );
+      
+      // 中心点在框架内 且 重叠面积至少占图片面积的20%
+      return this._isPointInRect(imgCenterX, imgCenterY, frame) && overlapArea >= imgArea * 0.2;
     });
     
-    // 如果中心点在某个框架内，返回该框架
+    // 如果中心点在某个框架内且重叠足够，返回该框架
     if (centerFrames.length > 0) {
       // 返回面积最小的框架（最精确的匹配）
       return [centerFrames.sort((a, b) => (a.width * a.height) - (b.width * b.height))[0]];
     }
     
-    // 最后回退到重叠检测，但只返回面积最小的重叠框架
+    // 最后回退到重叠检测，使用平衡的标准
     const overlappingFrames = frames.filter(frame => {
-      const frameLeft = frame.x;
-      const frameTop = frame.y;
-      const frameRight = frame.x + frame.width;
-      const frameBottom = frame.y + frame.height;
+      const overlapArea = this._calculateOverlapArea(
+        { x: imgLeft, y: imgTop, width: imgRight - imgLeft, height: imgBottom - imgTop },
+        { x: frame.x, y: frame.y, width: frame.width, height: frame.height }
+      );
       
-      // 检查图片是否与框架有重叠
-      return !(imgRight <= frameLeft || imgLeft >= frameRight || imgBottom <= frameTop || imgTop >= frameBottom);
+      // 重叠面积必须至少占图片面积的15%，避免误判
+      return overlapArea >= imgArea * 0.15;
     });
     
     // 返回面积最小的重叠框架
@@ -1986,8 +2123,12 @@ export class ExcelToTLDrawConverter {
       console.log('开始转换Excel文件:', file.name);
       
       // 读取Excel文件
+      const fileBuffer = await file.arrayBuffer();
       const workbook = new ExcelJS.Workbook();
-      await workbook.xlsx.load(await file.arrayBuffer());
+      await workbook.xlsx.load(fileBuffer);
+      
+      // 同时创建JSZip对象用于DrawingML解析
+      const zip = await JSZip.loadAsync(fileBuffer);
       
       // 获取第一个工作表
       const worksheet = workbook.worksheets[0];
@@ -2002,6 +2143,14 @@ export class ExcelToTLDrawConverter {
       console.log('开始提取图片...');
       const images = await this.extractImages(worksheet);
       console.log('提取到图片数量:', images.length);
+      
+      // 使用DrawingML解析器提取文本框和图片
+      console.log('开始使用DrawingML解析器提取元素...');
+      const drawingMLElements = await this.extractDrawingMLElements(worksheet, zip);
+      console.log('DrawingML解析结果:', drawingMLElements);
+      
+      // 合并DrawingML的文本框到现有文字数组
+      const allTexts = [];
       
       // 基于提取的图片进行动态布局分析
       const layoutInfo = this.analyzeLayoutStructure(worksheet, images);
@@ -2020,8 +2169,15 @@ export class ExcelToTLDrawConverter {
       
       // 3. 提取文字元素
       console.log('开始提取文字...');
-      const texts = this.extractTexts(worksheet, mergedCells, images);
-      console.log('提取到文字数量:', texts.length);
+      const cellTexts = this.extractTexts(worksheet, mergedCells, images);
+      console.log('提取到单元格文字数量:', cellTexts.length);
+      
+      // 合并单元格文字和DrawingML文本框
+      allTexts.push(...cellTexts);
+      allTexts.push(...drawingMLElements.texts);
+      
+      console.log('合并后总文字数量:', allTexts.length);
+      console.log('其中单元格文字:', cellTexts.length, 'DrawingML文本框:', drawingMLElements.texts.length);
       
       // 4. 提取表格框架
       console.log('开始提取表格框架...');
@@ -2039,7 +2195,7 @@ export class ExcelToTLDrawConverter {
       // 6. 跳过布局分析，直接使用原始位置
       console.log('跳过布局分析，使用原始位置...');
       const adjustedImages = images;  // 直接使用原始图片位置
-      const adjustedTexts = texts;    // 直接使用原始文字位置
+      const adjustedTexts = allTexts; // 使用合并后的文字位置
       const adjustedFrames = frames;  // 直接使用原始框架位置
       
       // 6.5. 先按容器把图片做"等比缩小且不放大"的自适应
@@ -2090,16 +2246,18 @@ export class ExcelToTLDrawConverter {
       }
       
       console.log('Excel转换完成！');
-      console.log(`创建了 ${frames.length} 个表格框, ${images.length} 个图片, ${texts.length} 个文字`);
+      console.log(`创建了 ${frames.length} 个表格框, ${images.length} 个图片, ${allTexts.length} 个文字`);
       
       return {
         success: true,
         stats: {
           frames: frames.length, // 使用矩形框代替frame
           images: images.length,
-          texts: texts.length,
+          texts: allTexts.length,
+          cellTexts: cellTexts.length,
+          drawingMLTexts: drawingMLElements.texts.length,
           mergedCells: mergedCells.length,
-          note: '使用矩形框绘制表格边框'
+          note: '使用矩形框绘制表格边框，包含DrawingML文本框'
         }
       };
       

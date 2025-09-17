@@ -60,7 +60,14 @@ export default function ImportExcelButton({ editor }) {
       const result = await importExcelToTLDraw(file, editor);
       
       if (result.success) {
-        alert(`Excel导入成功！共创建了 ${result.shapesCount} 个元素。`);
+        const stats = result.stats || {};
+        const message = `Excel导入成功！
+        
+创建了 ${stats.frames || 0} 个表格框
+创建了 ${stats.images || 0} 个图片
+创建了 ${stats.texts || 0} 个文字（其中 ${stats.cellTexts || 0} 个单元格文字，${stats.drawingMLTexts || 0} 个文本框）
+${stats.note ? '\n' + stats.note : ''}`;
+        alert(message);
       } else {
         alert(`导入失败: ${result.error}`);
       }
