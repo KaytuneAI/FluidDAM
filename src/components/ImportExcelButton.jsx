@@ -61,15 +61,17 @@ export default function ImportExcelButton({ editor }) {
       
       if (result.success) {
         const stats = result.stats || {};
-        const message = `Excel导入成功！
-        
-创建了 ${stats.frames || 0} 个表格框
-创建了 ${stats.images || 0} 个图片
-创建了 ${stats.texts || 0} 个文字（其中 ${stats.cellTexts || 0} 个单元格文字，${stats.drawingMLTexts || 0} 个文本框）
-${stats.note ? '\n' + stats.note : ''}`;
-        alert(message);
+        console.log('Excel导入成功！');
+        console.log(`创建了 ${stats.frames || 0} 个表格框`);
+        console.log(`创建了 ${stats.images || 0} 个图片`);
+        console.log(`创建了 ${stats.texts || 0} 个文字（其中 ${stats.cellTexts || 0} 个单元格文字，${stats.drawingMLTexts || 0} 个文本框）`);
+        if (stats.note) {
+          console.log(stats.note);
+        }
+        // 不再显示alert弹窗，只在控制台显示信息
       } else {
-        alert(`导入失败: ${result.error}`);
+        console.error(`导入失败: ${result.error}`);
+        alert(`导入失败: ${result.error}`); // 只有失败时才显示alert
       }
     } catch (error) {
       console.error('导入Excel时出错:', error);

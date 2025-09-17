@@ -527,9 +527,10 @@ export class ExcelToTLDrawConverter {
    * 使用DrawingML解析器提取文本框和图片
    * @param {Object} worksheet - Excel工作表
    * @param {JSZip} zip - Excel文件的zip对象
+   * @param {Object} opts - 过滤选项
    * @returns {Object} { texts: [], images: [] }
    */
-  async extractDrawingMLElements(worksheet, zip) {
+  async extractDrawingMLElements(worksheet, zip, opts = {}) {
     const drawingTexts = [];
     const drawingImages = [];
     
@@ -554,7 +555,17 @@ export class ExcelToTLDrawConverter {
       for (const drawingPath of drawingFiles) {
         try {
           console.log(`解析drawing文件: ${drawingPath}`);
-          const drawingResults = await DrawingML.parseDrawingML(zip, drawingPath, dims);
+          
+          // 设置过滤选项
+          const filterOpts = {
+            includeHidden: false,      // 不包含隐藏元素
+            includeVML: false,         // 不包含VML元素
+            includePrintOnly: false,   // 不包含仅打印元素
+            minPixelSize: 2,           // 最小像素尺寸
+            clipToSheetBounds: true    // 裁剪到工作表边界
+          };
+          
+          const drawingResults = await DrawingML.parseDrawingML(zip, drawingPath, dims, filterOpts);
           
           console.log(`从${drawingPath}解析到:`, drawingResults);
           
@@ -2025,16 +2036,34 @@ export class ExcelToTLDrawConverter {
                 }
               ]);
               
+              // 验证图片坐标和尺寸
+              const imgX = element.x * this.scale;
+              const imgY = element.y * this.scale;
+              const imgW = element.width * this.scale;
+              const imgH = element.height * this.scale;
+              
+              if (isNaN(imgX) || isNaN(imgY) || isNaN(imgW) || isNaN(imgH)) {
+                console.warn('图片元素坐标无效，跳过:', { 
+                  element, 
+                  imgX, 
+                  imgY, 
+                  imgW, 
+                  imgH,
+                  scale: this.scale 
+                });
+                continue;
+              }
+              
               // 创建图片形状 - 使用计算出的显示尺寸，统一应用缩放
-              console.log(`创建图片形状: 显示尺寸(${element.width}x${element.height}), 位置(${element.x}, ${element.y})`);
+              console.log(`创建图片形状: 显示尺寸(${imgW}x${imgH}), 位置(${imgX}, ${imgY})`);
               
               shape = {
                 type: 'image',
-                x: element.x * this.scale,
-                y: element.y * this.scale,
+                x: imgX,
+                y: imgY,
                 props: {
-                  w: element.width * this.scale,   // 统一应用缩放
-                  h: element.height * this.scale,  // 统一应用缩放
+                  w: imgW,   // 统一应用缩放
+                  h: imgH,  // 统一应用缩放
                   assetId: assetId
                 }
               };
@@ -2045,13 +2074,29 @@ export class ExcelToTLDrawConverter {
             break;
             
           case 'text':
+            // 验证坐标和尺寸是否为有效数字
+            const textX = element.x * this.scale;
+            const textY = element.y * this.scale;
+            const textW = element.width * this.scale;
+            
+            if (isNaN(textX) || isNaN(textY) || isNaN(textW)) {
+              console.warn('文字元素坐标无效，跳过:', { 
+                element, 
+                textX, 
+                textY, 
+                textW,
+                scale: this.scale 
+              });
+              continue;
+            }
+            
             shape = {
               type: 'text',
-              x: element.x * this.scale,
-              y: element.y * this.scale,
+              x: textX,
+              y: textY,
               props: {
                 richText: toRichText(element.text),
-                w: element.width * this.scale,
+                w: textW,
                 size: 's',
                 color: 'black'
               }
@@ -2059,15 +2104,33 @@ export class ExcelToTLDrawConverter {
             break;
             
           case 'frame':
+            // 验证框架坐标和尺寸
+            const frameX = element.x * this.scale;
+            const frameY = element.y * this.scale;
+            const frameW = element.width * this.scale;
+            const frameH = element.height * this.scale;
+            
+            if (isNaN(frameX) || isNaN(frameY) || isNaN(frameW) || isNaN(frameH)) {
+              console.warn('框架元素坐标无效，跳过:', { 
+                element, 
+                frameX, 
+                frameY, 
+                frameW, 
+                frameH,
+                scale: this.scale 
+              });
+              continue;
+            }
+            
             frameCounter++;
             shape = {
               type: 'geo',
-              x: element.x * this.scale,
-              y: element.y * this.scale,
+              x: frameX,
+              y: frameY,
               props: {
                 geo: 'rectangle',
-                w: element.width * this.scale,
-                h: element.height * this.scale,
+                w: frameW,
+                h: frameH,
                 fill: 'none',
                 color: 'black',
                 size: 's'
@@ -2149,6 +2212,11 @@ export class ExcelToTLDrawConverter {
       const drawingMLElements = await this.extractDrawingMLElements(worksheet, zip);
       console.log('DrawingML解析结果:', drawingMLElements);
       
+      // 显示过滤统计
+      if (drawingMLElements.skipped && drawingMLElements.skipped.length > 0) {
+        console.log(`DrawingML过滤了 ${drawingMLElements.skipped.length} 个幽灵元素`);
+      }
+      
       // 合并DrawingML的文本框到现有文字数组
       const allTexts = [];
       
@@ -2178,6 +2246,37 @@ export class ExcelToTLDrawConverter {
       
       console.log('合并后总文字数量:', allTexts.length);
       console.log('其中单元格文字:', cellTexts.length, 'DrawingML文本框:', drawingMLElements.texts.length);
+      
+      // 调试：显示所有提取的文字内容
+      console.log('=== 单元格文字内容 ===');
+      cellTexts.forEach((text, index) => {
+        console.log(`${index + 1}. "${text.text}" (${text.x}, ${text.y})`);
+      });
+      
+      console.log('=== DrawingML文本框内容 ===');
+      drawingMLElements.texts.forEach((text, index) => {
+        console.log(`${index + 1}. "${text.text}" (${text.x}, ${text.y})`);
+      });
+      
+      // 去重：移除重复的文字（相同内容和相近位置）
+      const uniqueTexts = [];
+      const seenTexts = new Set();
+      
+      for (const text of allTexts) {
+        // 创建文字的唯一标识（内容+位置）
+        const textKey = `${text.text}_${Math.round(text.x)}_${Math.round(text.y)}`;
+        
+        if (!seenTexts.has(textKey)) {
+          seenTexts.add(textKey);
+          uniqueTexts.push(text);
+        } else {
+          console.log(`跳过重复文字: "${text.text}" 位置(${text.x}, ${text.y})`);
+        }
+      }
+      
+      console.log(`去重后文字数量: ${uniqueTexts.length} (原来: ${allTexts.length})`);
+      allTexts.length = 0; // 清空原数组
+      allTexts.push(...uniqueTexts); // 使用去重后的数组
       
       // 4. 提取表格框架
       console.log('开始提取表格框架...');
