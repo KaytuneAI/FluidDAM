@@ -2,8 +2,61 @@ import * as ExcelJS from 'exceljs';
 import { toRichText } from 'tldraw';
 import JSZip from 'jszip';
 import { XMLParser } from 'fast-xml-parser';
-import DrawingML from './DrawingML';
-import { createTextFitConfig, pt2px, shrinkAndRefitTextShape, createSafeRichText } from './textFitUtils';
+import DrawingML from './DrawingML.js';
+import { createTextFitConfig, pt2px, shrinkAndRefitTextShape, createSafeRichText } from './textFitUtils.js';
+
+// 导入拆分后的工具函数
+import {
+  pointsToPx,
+  columnWidthToPx,
+} from './excel/utils/units.js';
+
+import {
+  getCellPixelBounds,
+  getCellPixelBoundsPrecise,
+  calculateOffsets,
+} from './excel/utils/geometry.js';
+
+import {
+  columnLetterToNumber,
+  getMergedCells,
+  isInMergedCell,
+} from './excel/utils/merges.js';
+
+import {
+  analyzeLayoutStructure,
+  groupElementsByRow,
+  groupElementsByColumn,
+  calculateElementSpacing,
+  identifyElementClusters,
+  calculateScaleFactors,
+} from './excel/utils/layout.js';
+
+import {
+  mapColorToTLDraw,
+  mapFontSizeToTLDraw,
+  createSafeRichText as createSafeRichTextUtil,
+} from './excel/utils/colorsFonts.js';
+
+import {
+  extractDrawingMLElements,
+} from './excel/utils/drawml.js';
+
+import {
+  extractImages,
+  compressImage,
+  getImageTextOverlays,
+} from './excel/utils/images.js';
+
+import {
+  extractTexts,
+  extractRectangleTexts,
+  extractTextFromRectangle,
+  extractTextFromDrawings,
+  extractTextFromSingleDrawing,
+  extractTextFromWorkbook,
+  extractTextFromWorksheetProperties,
+} from './excel/utils/texts.js';
 
 // Fidelity-first 模式配置
 export const PRESERVE_EXCEL_LAYOUT = false;       // 图片要fit到格子
@@ -26,7 +79,7 @@ export class ExcelToTLDrawConverter {
    * @returns {number} 像素值
    */
   pointsToPx(points) {
-    return points * 96 / 72;
+    return pointsToPx(points);
   }
 
   /**
@@ -35,9 +88,7 @@ export class ExcelToTLDrawConverter {
    * @returns {number} 像素值
    */
   columnWidthToPx(width) {
-    // Excel列宽近似换算公式（Calibri 11下较稳）
-    // 改进：使用更精确的换算，考虑不同字体和缩放
-    return Math.floor((width + 0.12) * 7);
+    return columnWidthToPx(width);
   }
 
   /**
@@ -46,26 +97,7 @@ export class ExcelToTLDrawConverter {
    * @returns {Object} { colOffsets: [], rowOffsets: [] }
    */
   calculateOffsets(worksheet) {
-    const colOffsets = [0]; // 第0列偏移为0
-    const rowOffsets = [0]; // 第0行偏移为0
-    
-    // 计算列偏移量
-    for (let col = 1; col <= (worksheet.columnCount || 50); col++) {
-      const colObj = worksheet.getColumn(col);
-      const colWidth = (colObj && colObj.width) ? colObj.width : 8.43;
-      const prevOffset = colOffsets[colOffsets.length - 1];
-      colOffsets.push(prevOffset + this.columnWidthToPx(colWidth));
-    }
-    
-    // 计算行偏移量
-    for (let row = 1; row <= (worksheet.rowCount || 100); row++) {
-      const rowObj = worksheet.getRow(row);
-      const rowHeight = (rowObj && rowObj.height) ? rowObj.height : 15;
-      const prevOffset = rowOffsets[rowOffsets.length - 1];
-      rowOffsets.push(prevOffset + this.pointsToPx(rowHeight));
-    }
-    
-    return { colOffsets, rowOffsets };
+    return calculateOffsets(worksheet);
   }
 
   /**
@@ -76,34 +108,7 @@ export class ExcelToTLDrawConverter {
    * @returns {Object} {x, y, width, height}
    */
   getCellPixelBoundsPrecise(row, col, worksheet) {
-    let x = 0;
-    let y = 0;
-
-    // 计算X坐标（累加前面所有列的宽度）
-    for (let c = 1; c < col; c++) {
-      const colObj = worksheet.getColumn(c);
-      // 安全获取列宽，使用更精确的换算
-      const colWidth = (colObj && colObj.width) ? colObj.width : 8.43;
-      x += this.columnWidthToPx(colWidth);
-    }
-
-    // 计算Y坐标（累加前面所有行的高度）
-    for (let r = 1; r < row; r++) {
-      const rowObj = worksheet.getRow(r);
-      // 安全获取行高，使用更精确的换算
-      const rowHeight = (rowObj && rowObj.height) ? rowObj.height : 15;
-      y += this.pointsToPx(rowHeight);
-    }
-
-    // 当前单元格的宽高
-    const currentCol = worksheet.getColumn(col);
-    const currentRow = worksheet.getRow(row);
-    
-    // 安全获取当前单元格的宽高
-    const width = this.columnWidthToPx((currentCol && currentCol.width) ? currentCol.width : 8.43);
-    const height = this.pointsToPx((currentRow && currentRow.height) ? currentRow.height : 15);
-
-    return { x, y, width, height };
+    return getCellPixelBoundsPrecise(row, col, worksheet);
   }
 
   /**
@@ -114,36 +119,7 @@ export class ExcelToTLDrawConverter {
    * @returns {Object} {x, y, width, height}
    */
   getCellPixelBounds(row, col, worksheet) {
-    let x = 0;
-    let y = 0;
-    let width = 0;
-    let height = 0;
-
-    // 计算X坐标（累加前面所有列的宽度）
-    for (let c = 1; c < col; c++) {
-      const colObj = worksheet.getColumn(c);
-      // 安全获取列宽
-      const colWidth = (colObj && colObj.width) ? colObj.width : 8.43;
-      x += this.columnWidthToPx(colWidth);
-    }
-
-    // 计算Y坐标（累加前面所有行的高度）
-    for (let r = 1; r < row; r++) {
-      const rowObj = worksheet.getRow(r);
-      // 安全获取行高
-      const rowHeight = (rowObj && rowObj.height) ? rowObj.height : 15;
-      y += this.pointsToPx(rowHeight);
-    }
-
-    // 当前单元格的宽高
-    const currentCol = worksheet.getColumn(col);
-    const currentRow = worksheet.getRow(row);
-    
-    // 安全获取当前单元格的宽高
-    width = this.columnWidthToPx((currentCol && currentCol.width) ? currentCol.width : 8.43);
-    height = this.pointsToPx((currentRow && currentRow.height) ? currentRow.height : 15);
-
-    return { x, y, width, height };
+    return getCellPixelBounds(row, col, worksheet);
   }
 
   /**
@@ -152,11 +128,7 @@ export class ExcelToTLDrawConverter {
    * @returns {number} 列数字
    */
   columnLetterToNumber(columnLetter) {
-    let result = 0;
-    for (let i = 0; i < columnLetter.length; i++) {
-      result = result * 26 + (columnLetter.charCodeAt(i) - 'A'.charCodeAt(0) + 1);
-    }
-    return result;
+    return columnLetterToNumber(columnLetter);
   }
 
   /**
@@ -165,83 +137,7 @@ export class ExcelToTLDrawConverter {
    * @returns {Array} 合并单元格信息数组
    */
   getMergedCells(worksheet) {
-    const mergedCells = [];
-    
-    try {
-      // 尝试不同的方式获取合并单元格信息
-      let merges = [];
-      
-      if (worksheet.model && worksheet.model.merges) {
-        merges = worksheet.model.merges;
-        console.log('从worksheet.model.merges获取合并单元格:', merges);
-      } else if (worksheet.merges) {
-        merges = worksheet.merges;
-        console.log('从worksheet.merges获取合并单元格:', merges);
-      } else if (worksheet._merges) {
-        merges = worksheet._merges;
-        console.log('从worksheet._merges获取合并单元格:', merges);
-      }
-      
-      console.log('找到的合并单元格数量:', merges.length);
-      
-      if (merges && merges.length > 0) {
-        merges.forEach((merge, index) => {
-          try {
-            let top, left, bottom, right;
-            
-            // 处理字符串格式的合并单元格 (如 'D11:G12')
-            if (typeof merge === 'string') {
-              console.log(`处理字符串格式合并单元格: ${merge}`);
-              const match = merge.match(/^([A-Z]+)(\d+):([A-Z]+)(\d+)$/);
-              if (match) {
-                const [, startCol, startRow, endCol, endRow] = match;
-                left = this.columnLetterToNumber(startCol);
-                top = parseInt(startRow);
-                right = this.columnLetterToNumber(endCol);
-                bottom = parseInt(endRow);
-                console.log(`解析结果: 行${top}-${bottom}, 列${left}-${right}`);
-              } else {
-                console.warn(`无法解析合并单元格字符串: ${merge}`);
-                return;
-              }
-            } else if (typeof merge === 'object' && merge.top !== undefined) {
-              // 处理对象格式的合并单元格
-              ({ top, left, bottom, right } = merge);
-            } else {
-              console.warn(`未知的合并单元格格式:`, merge);
-              return;
-            }
-            
-            console.log(`合并单元格 ${index}: 行${top}-${bottom}, 列${left}-${right}`);
-            
-            // 计算合并单元格的像素边界
-            const topLeft = this.getCellPixelBoundsPrecise(top, left, worksheet);
-            const bottomRight = this.getCellPixelBoundsPrecise(bottom + 1, right + 1, worksheet);
-            
-            mergedCells.push({
-              top,
-              left,
-              bottom,
-              right,
-              x: topLeft.x,
-              y: topLeft.y,
-              width: bottomRight.x - topLeft.x,
-              height: bottomRight.y - topLeft.y,
-              isMerged: true
-            });
-          } catch (error) {
-            console.warn('处理合并单元格失败:', error);
-          }
-        });
-      } else {
-        console.log('未找到合并单元格信息');
-      }
-    } catch (error) {
-      console.warn('获取合并单元格信息失败:', error);
-    }
-    
-    console.log('最终合并单元格数组:', mergedCells);
-    return mergedCells;
+    return getMergedCells(worksheet);
   }
 
   /**
@@ -252,10 +148,7 @@ export class ExcelToTLDrawConverter {
    * @returns {Object|null} 合并单元格信息或null
    */
   isInMergedCell(row, col, mergedCells) {
-    return mergedCells.find(merge => 
-      row >= merge.top && row <= merge.bottom &&
-      col >= merge.left && col <= merge.right
-    );
+    return isInMergedCell(row, col, mergedCells);
   }
 
   /**
@@ -264,162 +157,21 @@ export class ExcelToTLDrawConverter {
    * @param {Array} images - 图片元素数组
    */
   analyzeLayoutStructure(worksheet, images = []) {
-    const layoutInfo = {
-      cellDimensions: {},
-      elementClusters: [],
-      spacing: {},
-      scaleFactors: {}
-    };
-    
-    try {
-      // 1. 分析单元格尺寸分布
-      const rowCount = worksheet.rowCount || 100;
-      const colCount = worksheet.columnCount || 50;
-      
-      const rowHeights = [];
-      const colWidths = [];
-      
-      // 收集所有行高和列宽
-      for (let row = 1; row <= Math.min(rowCount, 100); row++) {
-        const rowHeight = worksheet.getRow(row)?.height || 15;
-        rowHeights.push({ row, height: rowHeight });
-      }
-      
-      for (let col = 1; col <= Math.min(colCount, 50); col++) {
-        const colWidth = worksheet.getColumn(col)?.width || 64;
-        colWidths.push({ col, width: colWidth });
-      }
-      
-      // 计算统计信息
-      const avgRowHeight = rowHeights.reduce((sum, r) => sum + r.height, 0) / rowHeights.length;
-      const avgColWidth = colWidths.reduce((sum, c) => sum + c.width, 0) / colWidths.length;
-      
-      // 识别异常大小的行/列（可能是图片区域）
-      const largeRows = rowHeights.filter(r => r.height > avgRowHeight * 1.5);
-      const largeCols = colWidths.filter(c => c.width > avgColWidth * 1.5);
-      
-      layoutInfo.cellDimensions = {
-        avgRowHeight,
-        avgColWidth,
-        totalRows: rowCount,
-        totalCols: colCount,
-        largeRows,
-        largeCols
-      };
-      
-      // 2. 分析图片元素的空间分布
-      if (images.length > 0) {
-        const imagePositions = images.map(img => ({
-          x: img.x,
-          y: img.y,
-          width: img.width,
-          height: img.height,
-          row: img.row || 0,
-          col: img.col || 0
-        }));
-        
-        // 按Y坐标分组（识别水平行）
-        const rows = this.groupElementsByRow(imagePositions);
-        
-        // 按X坐标分组（识别垂直列）
-        const cols = this.groupElementsByColumn(imagePositions);
-        
-        // 计算元素间的间距
-        const spacing = this.calculateElementSpacing(imagePositions, rows, cols);
-        
-        // 识别元素簇（相近的元素）
-        const clusters = this.identifyElementClusters(imagePositions);
-        
-        layoutInfo.elementClusters = clusters;
-        layoutInfo.spacing = spacing;
-        layoutInfo.rows = rows;
-        layoutInfo.cols = cols;
-        
-        // 3. 计算缩放因子
-        layoutInfo.scaleFactors = this.calculateScaleFactors(imagePositions, avgRowHeight, avgColWidth);
-      }
-      
-      console.log('动态布局分析完成:', layoutInfo);
-      
-    } catch (error) {
-      console.warn('动态布局分析失败:', error);
-    }
-    
-    return layoutInfo;
+    return analyzeLayoutStructure(worksheet, images);
   }
 
   /**
    * 按Y坐标分组元素（识别水平行）
    */
   groupElementsByRow(elements) {
-    const rows = [];
-    const tolerance = 50; // 容差范围
-    
-    elements.sort((a, b) => a.y - b.y);
-    
-    for (const element of elements) {
-      let foundRow = false;
-      for (const row of rows) {
-        if (Math.abs(element.y - row.y) <= tolerance) {
-          row.elements.push(element);
-          foundRow = true;
-          break;
-        }
-      }
-      if (!foundRow) {
-        rows.push({
-          y: element.y,
-          elements: [element],
-          avgHeight: element.height
-        });
-      }
-    }
-    
-    // 计算每行的统计信息
-    rows.forEach(row => {
-      row.elements.sort((a, b) => a.x - b.x);
-      row.avgHeight = row.elements.reduce((sum, el) => sum + el.height, 0) / row.elements.length;
-      row.width = Math.max(...row.elements.map(el => el.x + el.width)) - Math.min(...row.elements.map(el => el.x));
-    });
-    
-    return rows;
+    return groupElementsByRow(elements);
   }
 
   /**
    * 按X坐标分组元素（识别垂直列）
    */
   groupElementsByColumn(elements) {
-    const cols = [];
-    const tolerance = 50; // 容差范围
-    
-    elements.sort((a, b) => a.x - b.x);
-    
-    for (const element of elements) {
-      let foundCol = false;
-      for (const col of cols) {
-        if (Math.abs(element.x - col.x) <= tolerance) {
-          col.elements.push(element);
-          foundCol = true;
-          break;
-        }
-      }
-      if (!foundCol) {
-        cols.push({
-          x: element.x,
-          elements: [element],
-          avgWidth: element.width
-        });
-      }
-    }
-    
-    // 计算每列的统计信息
-    cols.forEach(col => {
-      col.elements.sort((a, b) => a.y - b.y);
-      col.avgWidth = col.elements.reduce((sum, el) => sum + el.width, 0) / col.elements.length;
-      col.height = Math.max(...col.elements.map(el => el.y + el.height)) - Math.min(...col.elements.map(el => el.y));
-    });
-    
-    return cols;
+    return groupElementsByColumn(elements);
   }
 
   /**
