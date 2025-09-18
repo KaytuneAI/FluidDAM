@@ -48,6 +48,17 @@ import {
   getImageTextOverlays,
 } from './excel/utils/images.js';
 
+// 导入图片frame处理工具
+import {
+  createFrameFromImageAnchor,
+  placeImageIntoFrame,
+  processImagesWithFrames,
+  createImageFrameShape,
+  addFrameInfoToImage,
+  isImageWithinFrame,
+  calculateImageScale
+} from './imageFrameUtils.js';
+
 import {
   extractTexts,
   extractRectangleTexts,
@@ -541,7 +552,7 @@ export class ExcelToTLDrawConverter {
             imageId = `image_${Math.random().toString(36).substr(2, 9)}`;
           }
           
-          console.log('处理图片:', image, 'ID:', imageId);
+          // console.log('处理图片:', image, 'ID:', imageId);
           
           // 获取图片数据
           let imageData;
@@ -550,7 +561,7 @@ export class ExcelToTLDrawConverter {
             console.log('通过getImage()获取图片数据:', imageData);
           } else {
             imageData = image;
-            console.log('直接使用图片对象:', imageData);
+            // console.log('直接使用图片对象:', imageData);
           }
           
           if (!imageData) {
@@ -569,24 +580,19 @@ export class ExcelToTLDrawConverter {
           }
           processedImages.add(key);
           
-          // 详细调试图片数据
-          console.log('图片数据类型:', typeof imageData);
-          console.log('图片数据构造函数:', imageData.constructor?.name);
-          console.log('图片数据所有属性:', Object.getOwnPropertyNames(imageData));
-          console.log('图片数据所有键:', Object.keys(imageData));
-          console.log('图片数据值:', imageData);
+          // 详细调试图片数据（已注释以减少日志输出）
+          // console.log('图片数据类型:', typeof imageData);
           
           // 检查不同的图片数据格式
           let buffer = null;
           
           // 如果有imageId，尝试从workbook获取图片数据
           if (imageData.imageId !== undefined && imageData.imageId !== null) {
-            console.log('检测到imageId:', imageData.imageId);
+            // console.log('检测到imageId:', imageData.imageId);
             try {
               // 尝试从workbook获取图片
               const workbook = imageData.worksheet?._workbook;
-              console.log('workbook对象:', workbook);
-              console.log('workbook可用方法:', workbook ? Object.keys(workbook).filter(k => k.includes('image') || k.includes('Image') || k.includes('get')) : '无');
+              // console.log('workbook对象:', workbook);
               
               if (workbook) {
                 // 尝试多种方法获取图片
@@ -596,7 +602,7 @@ export class ExcelToTLDrawConverter {
                 if (typeof workbook.getImage === 'function') {
                   try {
                     imageBuffer = await workbook.getImage(imageData.imageId);
-                    console.log('通过getImage获取图片数据:', imageBuffer);
+                    // console.log('通过getImage获取图片数据:', imageBuffer);
                   } catch (e) {
                     console.warn('getImage方法失败:', e);
                   }
@@ -754,7 +760,7 @@ export class ExcelToTLDrawConverter {
                 // 使用更安全的方法转换Base64
                 const binaryString = Array.from(uint8Array, byte => String.fromCharCode(byte)).join('');
                 base64String = btoa(binaryString);
-                console.log('Base64转换成功，长度:', base64String.length);
+                // console.log('Base64转换成功，长度:', base64String.length);
               } catch (btoaError) {
                 console.warn('btoa转换失败，尝试分块转换:', btoaError);
                 // 分块转换作为备用方案
@@ -851,7 +857,7 @@ export class ExcelToTLDrawConverter {
             try {
               const testImg = new Image();
               testImg.onload = () => {
-                console.log('Base64图片URL验证成功，图片尺寸:', testImg.width, 'x', testImg.height);
+                // console.log('Base64图片URL验证成功，图片尺寸:', testImg.width, 'x', testImg.height);
               };
               testImg.onerror = (error) => {
                 console.error('Base64图片URL验证失败，图片无法加载:', error);
@@ -871,56 +877,79 @@ export class ExcelToTLDrawConverter {
             continue; // 跳过这个图片，继续处理下一个
           }
           
-          // 计算图片位置 - 使用锚点范围计算真实显示尺寸
+          // 新逻辑：先根据Excel图片锚点生成对应的frame
+          let frameRect = null;
           let x = 0, y = 0, width = 0, height = 0;
           
-          if (image.range && image.range.tl && image.range.br) {
-            const anchor = image.range;
-            const tl = anchor.tl;
-            const br = anchor.br;
-            
-            // 计算左上角位置（包含native偏移）
-            const tlCellBounds = this.getCellPixelBoundsPrecise(tl.row, tl.col, worksheet);
-            const brCellBounds = this.getCellPixelBoundsPrecise(br.row, br.col, worksheet);
-            
-            // 将native偏移从Excel单位转换为像素
-            // ExcelJS的native偏移通常是EMU单位，1英寸 = 914400 EMU
-            // 改进：添加更精确的单位转换和错误处理
-            const emuToPx = (emu) => {
-              if (!emu || emu === 0) return 0;
-              // 确保是数字类型
-              const numEmu = typeof emu === 'number' ? emu : parseFloat(emu);
-              if (isNaN(numEmu)) return 0;
-              // 1英寸 = 914400 EMU, 1英寸 = 96像素
-              return (numEmu * 96) / 914400;
+          if (image.range) {
+            // 创建包含worksheet信息的drawing对象
+            const drawingWithWorksheet = {
+              range: image.range,
+              worksheet: worksheet
             };
             
-            // 计算真实位置和尺寸
-            x = tlCellBounds.x + emuToPx(tl.nativeColOffset);
-            y = tlCellBounds.y + emuToPx(tl.nativeRowOffset);
+            // 计算行列偏移量
+            const offsets = this.calculateOffsets(worksheet);
             
-            // 计算右下角位置
-            const brX = brCellBounds.x + emuToPx(br.nativeColOffset);
-            const brY = brCellBounds.y + emuToPx(br.nativeRowOffset);
+            // 生成frame矩形
+            frameRect = createFrameFromImageAnchor(drawingWithWorksheet, offsets.rowOffsets, offsets.colOffsets, this.getCellPixelBoundsPrecise.bind(this));
             
-            // 计算真实显示尺寸
-            width = brX - x;
-            height = brY - y;
-            
-            console.log(`图片锚点定位: tl(${tl.row},${tl.col}) br(${br.row},${br.col})`);
-            console.log(`native偏移: tl(${tl.nativeColOffset},${tl.nativeRowOffset}) br(${br.nativeColOffset},${br.nativeRowOffset})`);
-            console.log(`计算位置: (${x},${y}) 尺寸: ${width}x${height}`);
-          } else if (image.range && image.range.tl) {
-            // 如果没有br锚点，回退到只使用tl锚点
-            const anchor = image.range;
-            const row = anchor.tl.row;
-            const col = anchor.tl.col;
-            
-            const cellBounds = this.getCellPixelBoundsPrecise(row, col, worksheet);
-            x = cellBounds.x;
-            y = cellBounds.y;
-            
-            console.log(`图片基础位置: 行${row}列${col}, 位置:(${x},${y})`);
+            if (frameRect) {
+              // 使用frame的位置和尺寸作为图片的容器
+              x = frameRect.x;
+              y = frameRect.y;
+              width = frameRect.width;
+              height = frameRect.height;
+              
+              // console.log(`图片使用frame容器: 位置(${x},${y}) 尺寸: ${width}x${height}`);
+            } else {
+              // 如果frame生成失败，回退到原来的逻辑
+              console.warn('frame生成失败，使用原始锚点计算');
+              
+              if (image.range.tl && image.range.br) {
+                const anchor = image.range;
+                const tl = anchor.tl;
+                const br = anchor.br;
+                
+                // 计算左上角位置（包含native偏移）
+                const tlCellBounds = this.getCellPixelBoundsPrecise(tl.row, tl.col, worksheet);
+                const brCellBounds = this.getCellPixelBoundsPrecise(br.row, br.col, worksheet);
+                
+                // 将native偏移从Excel单位转换为像素
+                const emuToPx = (emu) => {
+                  if (!emu || emu === 0) return 0;
+                  const numEmu = typeof emu === 'number' ? emu : parseFloat(emu);
+                  if (isNaN(numEmu)) return 0;
+                  return (numEmu * 96) / 914400;
+                };
+                
+                // 计算真实位置和尺寸
+                x = tlCellBounds.x + emuToPx(tl.nativeColOffset);
+                y = tlCellBounds.y + emuToPx(tl.nativeRowOffset);
+                
+                // 计算右下角位置
+                const brX = brCellBounds.x + emuToPx(br.nativeColOffset);
+                const brY = brCellBounds.y + emuToPx(br.nativeRowOffset);
+                
+                // 计算真实显示尺寸
+                width = brX - x;
+                height = brY - y;
+                
+                console.log(`图片锚点定位: tl(${tl.row},${tl.col}) br(${br.row},${br.col})`);
+                console.log(`计算位置: (${x},${y}) 尺寸: ${width}x${height}`);
+              } else if (image.range.tl) {
+                // 如果没有br锚点，回退到只使用tl锚点
+                const anchor = image.range;
+                const row = anchor.tl.row;
+                const col = anchor.tl.col;
+                
+                const cellBounds = this.getCellPixelBoundsPrecise(row, col, worksheet);
+                x = cellBounds.x;
+                y = cellBounds.y;
+                
+                console.log(`图片基础位置: 行${row}列${col}, 位置:(${x},${y})`);
+              }
+            }
           }
           
           // 获取原始图片的真实尺寸（用于资产创建）
@@ -934,7 +963,7 @@ export class ExcelToTLDrawConverter {
               testImg.onload = () => {
                 originalWidth = testImg.width;
                 originalHeight = testImg.height;
-                console.log('从Base64获取的真实图片尺寸:', originalWidth, 'x', originalHeight);
+                // console.log('从Base64获取的真实图片尺寸:', originalWidth, 'x', originalHeight);
                 resolve();
               };
               testImg.onerror = () => {
@@ -953,10 +982,10 @@ export class ExcelToTLDrawConverter {
             height = originalHeight;
             console.log(`使用原始图片尺寸作为后备: ${width}x${height}`);
           } else {
-            console.log(`使用锚点计算的显示尺寸: ${width}x${height}`);
+            // console.log(`使用锚点计算的显示尺寸: ${width}x${height}`);
           }
           
-          const imageInfo = {
+          const imageInfo = addFrameInfoToImage({
             url: imageUrl,
             x: x,
             y: y,
@@ -967,9 +996,9 @@ export class ExcelToTLDrawConverter {
             originalHeight: originalHeight, // 保留原始尺寸用于资产创建
             row: image.range?.tl?.row || 0,
             col: image.range?.tl?.col || 0
-          };
+          }, frameRect, images.length);
           
-          console.log('添加图片信息:', imageInfo);
+          // console.log('添加图片信息:', imageInfo);
           images.push(imageInfo);
         } catch (error) {
           console.warn('处理图片失败:', error);
@@ -1878,6 +1907,7 @@ export class ExcelToTLDrawConverter {
     return adjustedElements;
   }
 
+
   /**
    * 工具：判断点是否在矩形内
    * @param {number} px - 点的x坐标
@@ -2180,6 +2210,7 @@ export class ExcelToTLDrawConverter {
     return texts; // 返回处理后的文本框数组
   }
 
+
   /**
    * 核心：把图片 contain 到容器里，且不放大超过 100%
    * @param {Array} images - 图片数组
@@ -2331,31 +2362,35 @@ export class ExcelToTLDrawConverter {
               const drawW = Math.round(naturalW * scaleFit * 100) / 100; // 提高精度
               const drawH = Math.round(naturalH * scaleFit * 100) / 100; // 提高精度
               
-              // 居中到锚点矩形内
-              const drawX = Math.round(boxX + (boxW - drawW) / 2);
-              const drawY = Math.round(boxY + (boxH - drawH) / 2);
+              // 确保尺寸不为0（TLDraw v3要求）
+              const finalW = Math.max(1, drawW);
+              const finalH = Math.max(1, drawH);
               
-              if (isNaN(drawX) || isNaN(drawY) || isNaN(drawW) || isNaN(drawH)) {
+              // 居中到锚点矩形内
+              const drawX = Math.round(boxX + (boxW - finalW) / 2);
+              const drawY = Math.round(boxY + (boxH - finalH) / 2);
+              
+              if (isNaN(drawX) || isNaN(drawY) || isNaN(finalW) || isNaN(finalH) || finalW <= 0 || finalH <= 0) {
                 console.warn('图片元素坐标无效，跳过:', { 
                   element, 
                   drawX, 
                   drawY, 
-                  drawW, 
-                  drawH,
+                  finalW, 
+                  finalH,
                   scale: this.scale 
                 });
                 continue;
               }
               
               // 3) 创建图片 shape（不设置任何 crop，不进 frame）
-              console.log(`创建图片形状: 等比缩放模式，原图(${naturalW}x${naturalH}) -> 显示(${drawW}x${drawH}), 位置(${drawX}, ${drawY})`);
+              // console.log(`创建图片形状: 等比缩放模式，原图(${naturalW}x${naturalH}) -> 显示(${finalW}x${finalH}), 位置(${drawX}, ${drawY})`);
               
               // 4) 验证断言：确保图片不超出锚点矩形
-              const exceedsAnchor = drawW > boxW + 0.5 || drawH > boxH + 0.5;
+              const exceedsAnchor = finalW > boxW + 0.5 || finalH > boxH + 0.5;
               if (exceedsAnchor) {
-                console.error(`FITTING_BROKEN: image exceeds anchor rect - drawW:${drawW} > boxW:${boxW} or drawH:${drawH} > boxH:${boxH}`);
+                console.error(`FITTING_BROKEN: image exceeds anchor rect - finalW:${finalW} > boxW:${boxW} or finalH:${finalH} > boxH:${boxH}`);
               } else {
-                console.log(`✅ 图片尺寸验证通过: drawW:${drawW} <= boxW:${boxW}, drawH:${drawH} <= boxH:${boxH}`);
+                // console.log(`✅ 图片尺寸验证通过: finalW:${finalW} <= boxW:${boxW}, finalH:${finalH} <= boxH:${boxH}`);
               }
               
               shape = {
@@ -2364,8 +2399,8 @@ export class ExcelToTLDrawConverter {
                 x: drawX,
                 y: drawY,
                 props: {
-                  w: drawW,
-                  h: drawH,
+                  w: finalW,
+                  h: finalH,
                   assetId: assetId
                 }
               };
@@ -2483,37 +2518,11 @@ export class ExcelToTLDrawConverter {
             break;
             
           case 'frame':
-            // 验证框架坐标和尺寸
-            const frameX = element.x * this.scale;
-            const frameY = element.y * this.scale;
-            const frameW = element.width * this.scale;
-            const frameH = element.height * this.scale;
-            
-            if (isNaN(frameX) || isNaN(frameY) || isNaN(frameW) || isNaN(frameH)) {
-              console.warn('框架元素坐标无效，跳过:', { 
-                element, 
-                frameX, 
-                frameY, 
-                frameW, 
-                frameH,
-                scale: this.scale 
-              });
-              continue;
+            // 使用新的工具函数创建frame形状
+            shape = createImageFrameShape(element, this.scale);
+            if (shape) {
+              frameCounter++;
             }
-            
-            frameCounter++;
-            shape = {
-              type: 'geo',
-              x: frameX,
-              y: frameY,
-              props: {
-                geo: 'rectangle',
-                w: frameW,
-                h: frameH,
-                fill: 'none',
-                color: 'black'
-              }
-            };
             break;
             
           case 'background':
@@ -2766,20 +2775,24 @@ export class ExcelToTLDrawConverter {
       let adjustedTexts = allTexts || []; // 使用合并后的文字位置，提供默认值
       const adjustedFrames = frames || [];  // 直接使用原始框架位置，提供默认值
       
-      // 6.5. Fidelity-first模式：直接使用Excel锚点矩形，或进行容器适配
-      if (PRESERVE_EXCEL_LAYOUT) {
-        console.log('Fidelity-first模式：直接使用Excel锚点矩形，保持原始布局');
-        adjustedImages = this._fitImagesIntoFrames(adjustedImages, adjustedFrames, 0);
-        adjustedTexts = this._fitTextboxesIntoFrames(adjustedTexts, adjustedFrames, 4);
-      } else {
-        console.log('传统模式：调整图片尺寸以适应容器...');
-        adjustedImages = this._fitImagesIntoFrames(adjustedImages, adjustedFrames, 0);
-        console.log('图片尺寸调整完成');
-        
-        console.log('传统模式：调整textbox以适应容器...');
-        adjustedTexts = this._fitTextboxesIntoFrames(adjustedTexts, adjustedFrames, 4);
-        console.log('textbox适配完成');
-      }
+      // 6.5. 新逻辑：为每张图片生成对应的frame，然后适配图片到frame中
+      const { adjustedImages: processedImages, imageFrames } = processImagesWithFrames(
+        adjustedImages, 
+        createFrameFromImageAnchor, 
+        placeImageIntoFrame
+      );
+      
+      // 更新调整后的图片数组
+      adjustedImages.length = 0;
+      adjustedImages.push(...processedImages);
+      
+      // 将图片frame添加到总的frame数组中
+      adjustedFrames.push(...imageFrames);
+      console.log(`生成了${imageFrames.length}个图片frame，总共${adjustedFrames.length}个frame`);
+      
+      // 处理textbox适配
+      adjustedTexts = this._fitTextboxesIntoFrames(adjustedTexts, adjustedFrames, 4);
+      console.log('textbox适配完成');
       
       // 7. 批量创建形状（按正确层级顺序：背景→边框→图片→文本）
       console.log('开始创建TLDraw形状...');
@@ -2790,13 +2803,13 @@ export class ExcelToTLDrawConverter {
         await this.createShapesBatch(backgrounds, 'background');
       }
       
-      // 2. 创建表格框（只是画线，不裁剪）
+      // 2. 创建frame（包括表格框和图片frame）
       if (adjustedFrames.length > 0) {
-        console.log('开始创建表格框形状...');
+        console.log('开始创建frame形状...');
         try {
           await this.createShapesBatch(adjustedFrames, 'frame');
         } catch (frameError) {
-          console.warn('表格框创建失败，但不影响其他内容:', frameError);
+          console.warn('frame创建失败，但不影响其他内容:', frameError);
         }
       }
       
