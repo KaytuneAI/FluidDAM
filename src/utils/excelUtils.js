@@ -1,6 +1,7 @@
 import * as ExcelJS from 'exceljs';
 import { toRichText } from 'tldraw';
 import JSZip from 'jszip';
+import { XMLParser } from 'fast-xml-parser';
 import DrawingML from './DrawingML';
 
 /**
@@ -524,7 +525,7 @@ export class ExcelToTLDrawConverter {
   }
 
   /**
-   * 使用DrawingML解析器提取文本框和图片
+   * 使用DrawingML解析器提取文本框和图片（只解析当前worksheet关联的drawing文件）
    * @param {Object} worksheet - Excel工作表
    * @param {JSZip} zip - Excel文件的zip对象
    * @param {Object} opts - 过滤选项
@@ -533,6 +534,7 @@ export class ExcelToTLDrawConverter {
   async extractDrawingMLElements(worksheet, zip, opts = {}) {
     const drawingTexts = [];
     const drawingImages = [];
+    let sheetIndex = 1; // 默认值，防止未定义错误
     
     try {
       console.log('开始使用DrawingML解析器提取元素...');
@@ -541,96 +543,134 @@ export class ExcelToTLDrawConverter {
       const dims = this.calculateOffsets(worksheet);
       console.log('计算的行列偏移量:', dims);
       
-      // 查找drawing文件
-      const drawingFiles = [];
-      for (const fileName of Object.keys(zip.files)) {
-        if (fileName.startsWith('xl/drawings/drawing') && fileName.endsWith('.xml')) {
-          drawingFiles.push(fileName);
+      // 获取当前worksheet的索引（从0开始）
+      const workbook = worksheet._workbook;
+      sheetIndex = workbook.worksheets.indexOf(worksheet) + 1; // 转换为1-based索引
+      console.log(`当前worksheet索引: ${sheetIndex}`);
+      
+      // 查找当前worksheet关联的drawing文件
+      const relsPath = `xl/worksheets/_rels/sheet${sheetIndex}.xml.rels`;
+      let drawingPath = null;
+      
+      if (zip.file(relsPath)) {
+        try {
+          const relsXml = await zip.file(relsPath).async('string');
+          const parser = new XMLParser({ ignoreAttributes: false });
+          const relsDoc = parser.parse(relsXml);
+          
+          if (relsDoc.Relationships && relsDoc.Relationships.Relationship) {
+            const relationships = relsDoc.Relationships.Relationship;
+            const relArray = Array.isArray(relationships) ? relationships : [relationships];
+            
+            // 查找drawing关系
+            const drawingRel = relArray.find(r => 
+              r['@_Type'] && r['@_Type'].includes('/drawing')
+            );
+            
+            if (drawingRel && drawingRel['@_Target']) {
+              // 构建drawing文件路径
+              drawingPath = `xl/drawings/${drawingRel['@_Target'].replace('../drawings/', '')}`;
+              console.log(`找到worksheet ${sheetIndex} 关联的drawing文件: ${drawingPath}`);
+            }
+          }
+        } catch (error) {
+          console.warn(`解析worksheet关系文件失败: ${relsPath}`, error);
         }
+      } else {
+        console.log(`未找到worksheet关系文件: ${relsPath}`);
       }
       
-      console.log('找到的drawing文件:', drawingFiles);
+      // 如果没有找到关联的drawing文件，跳过DrawingML解析
+      if (!drawingPath) {
+        console.log(`worksheet ${sheetIndex} 没有关联的drawing文件，跳过DrawingML解析`);
+        return { texts: drawingTexts, images: drawingImages };
+      }
       
-      // 解析每个drawing文件
-      for (const drawingPath of drawingFiles) {
-        try {
-          console.log(`解析drawing文件: ${drawingPath}`);
-          
-          // 设置过滤选项 - 调试模式，放宽过滤条件
-          const filterOpts = {
-            includeHidden: true,       // 包含隐藏元素（调试）
-            includeVML: false,         // 不包含VML元素
-            includePrintOnly: true,    // 包含仅打印元素（调试）
-            minPixelSize: 0,           // 最小像素尺寸设为0（调试）
-            clipToSheetBounds: false   // 不裁剪到工作表边界（调试）
-          };
-          
-          const drawingResults = await DrawingML.parseDrawingML(zip, drawingPath, dims, filterOpts);
-          
-          console.log(`从${drawingPath}解析到:`, drawingResults);
-          
-          // 处理文本框
-          if (drawingResults.texts && drawingResults.texts.length > 0) {
-            for (const textItem of drawingResults.texts) {
-              if (textItem.text && textItem.text.trim()) {
-                drawingTexts.push({
-                  text: textItem.text.trim(),
-                  x: textItem.rect.x,
-                  y: textItem.rect.y,
-                  width: textItem.rect.w,
-                  height: textItem.rect.h,
-                  type: 'text',
-                  source: 'drawingml'
-                });
-                console.log(`添加DrawingML文本框: "${textItem.text.trim()}" 位置(${textItem.rect.x}, ${textItem.rect.y})`);
-              }
+      // 验证drawing文件是否存在
+      if (!zip.file(drawingPath)) {
+        console.warn(`drawing文件不存在: ${drawingPath}`);
+        return { texts: drawingTexts, images: drawingImages };
+      }
+      
+      // 只解析当前worksheet关联的drawing文件
+      try {
+        console.log(`解析worksheet ${sheetIndex} 的drawing文件: ${drawingPath}`);
+        
+        // 设置过滤选项 - 调试模式，放宽过滤条件
+        const filterOpts = {
+          includeHidden: true,       // 包含隐藏元素（调试）
+          includeVML: false,         // 不包含VML元素
+          includePrintOnly: true,    // 包含仅打印元素（调试）
+          minPixelSize: 0,           // 最小像素尺寸设为0（调试）
+          clipToSheetBounds: false   // 不裁剪到工作表边界（调试）
+        };
+        
+        const drawingResults = await DrawingML.parseDrawingML(zip, drawingPath, dims, filterOpts);
+        
+        console.log(`从${drawingPath}解析到:`, drawingResults);
+        
+        // 处理文本框
+        if (drawingResults.texts && drawingResults.texts.length > 0) {
+          for (const textItem of drawingResults.texts) {
+            if (textItem.text && textItem.text.trim()) {
+              drawingTexts.push({
+                text: textItem.text.trim(),
+                x: textItem.rect.x,
+                y: textItem.rect.y,
+                width: textItem.rect.w,
+                height: textItem.rect.h,
+                type: 'textbox', // 标记为textbox类型
+                source: 'drawingml'
+              });
+              console.log(`添加DrawingML文本框: "${textItem.text.trim()}" 位置(${textItem.rect.x}, ${textItem.rect.y})`);
             }
           }
-          
-          // 处理图片
-          if (drawingResults.images && drawingResults.images.length > 0) {
-            for (const imageItem of drawingResults.images) {
-              // 从workbook获取图片数据
-              try {
-                const workbook = worksheet._workbook;
-                let imageData = null;
-                
-                // 尝试通过rId获取图片
-                if (imageItem.rId && workbook) {
-                  // 这里需要根据实际的ExcelJS API来获取图片
-                  // 可能需要遍历workbook的图片集合
-                  console.log(`尝试获取图片数据，rId: ${imageItem.rId}`);
-                  
-                  // 暂时创建一个占位符，实际实现需要根据ExcelJS的API调整
-                  drawingImages.push({
-                    url: null, // 需要从workbook获取
-                    x: imageItem.rect.x,
-                    y: imageItem.rect.y,
-                    width: imageItem.rect.w,
-                    height: imageItem.rect.h,
-                    type: 'image',
-                    source: 'drawingml',
-                    rId: imageItem.rId,
-                    target: imageItem.target
-                  });
-                }
-              } catch (error) {
-                console.warn('处理DrawingML图片失败:', error);
-              }
-            }
-          }
-          
-        } catch (error) {
-          console.warn(`解析drawing文件${drawingPath}失败:`, error);
         }
+        
+        // 处理图片
+        if (drawingResults.images && drawingResults.images.length > 0) {
+          for (const imageItem of drawingResults.images) {
+            // 从workbook获取图片数据
+            try {
+              const workbook = worksheet._workbook;
+              let imageData = null;
+              
+              // 尝试通过rId获取图片
+              if (imageItem.rId && workbook) {
+                // 这里需要根据实际的ExcelJS API来获取图片
+                // 可能需要遍历workbook的图片集合
+                console.log(`尝试获取图片数据，rId: ${imageItem.rId}`);
+                
+                // 暂时创建一个占位符，实际实现需要根据ExcelJS的API调整
+                drawingImages.push({
+                  url: null, // 需要从workbook获取
+                  x: imageItem.rect.x,
+                  y: imageItem.rect.y,
+                  width: imageItem.rect.w,
+                  height: imageItem.rect.h,
+                  type: 'image',
+                  source: 'drawingml',
+                  rId: imageItem.rId,
+                  target: imageItem.target
+                });
+              }
+            } catch (error) {
+              console.warn('处理DrawingML图片失败:', error);
+            }
+          }
+        }
+        
+      } catch (error) {
+        console.warn(`解析drawing文件${drawingPath}失败:`, error);
       }
       
     } catch (error) {
       console.warn('DrawingML解析失败:', error);
     }
     
-    console.log(`DrawingML解析完成: ${drawingTexts.length}个文本框, ${drawingImages.length}个图片`);
-    return { texts: drawingTexts, images: drawingImages };
+      console.log(`DrawingML解析完成: ${drawingTexts.length}个文本框, ${drawingImages.length}个图片`);
+      console.log(`✅ 修复验证: 只解析了worksheet ${sheetIndex} 关联的drawing文件，避免了加载其他sheet的文本框`);
+      return { texts: drawingTexts, images: drawingImages };
   }
 
   /**
