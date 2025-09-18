@@ -3,11 +3,6 @@ import { toRichText } from 'tldraw';
 import JSZip from 'jszip';
 import { XMLParser } from 'fast-xml-parser';
 import DrawingML from './DrawingML';
-import { createTextFitConfig, pt2px, shrinkAndRefitTextShape, createSafeRichText } from './textFitUtils';
-
-// Fidelity-first 模式配置
-export const PRESERVE_EXCEL_LAYOUT = false;       // 图片要fit到格子
-export const SNAP_TO_FRAME_THRESHOLD = 0.95;      // 可选：与某个frame重叠≥95%才贴齐
 
 /**
  * Excel到TLDraw转换工具类
@@ -539,7 +534,6 @@ export class ExcelToTLDrawConverter {
   async extractDrawingMLElements(worksheet, zip, opts = {}) {
     const drawingTexts = [];
     const drawingImages = [];
-    let sheetIndex = 1; // 默认值，防止未定义错误
     
     try {
       console.log('开始使用DrawingML解析器提取元素...');
@@ -550,7 +544,7 @@ export class ExcelToTLDrawConverter {
       
       // 获取当前worksheet的索引（从0开始）
       const workbook = worksheet._workbook;
-      sheetIndex = workbook.worksheets.indexOf(worksheet) + 1; // 转换为1-based索引
+      const sheetIndex = workbook.worksheets.indexOf(worksheet) + 1; // 转换为1-based索引
       console.log(`当前worksheet索引: ${sheetIndex}`);
       
       // 查找当前worksheet关联的drawing文件
@@ -560,7 +554,7 @@ export class ExcelToTLDrawConverter {
       if (zip.file(relsPath)) {
         try {
           const relsXml = await zip.file(relsPath).async('string');
-          const parser = new XMLParser({ ignoreAttributes: false });
+          const parser = new (await import('fast-xml-parser')).XMLParser({ ignoreAttributes: false });
           const relsDoc = parser.parse(relsXml);
           
           if (relsDoc.Relationships && relsDoc.Relationships.Relationship) {
@@ -673,9 +667,8 @@ export class ExcelToTLDrawConverter {
       console.warn('DrawingML解析失败:', error);
     }
     
-      console.log(`DrawingML解析完成: ${drawingTexts.length}个文本框, ${drawingImages.length}个图片`);
-      console.log(`✅ 修复验证: 只解析了worksheet ${sheetIndex} 关联的drawing文件，避免了加载其他sheet的文本框`);
-      return { texts: drawingTexts, images: drawingImages };
+    console.log(`DrawingML解析完成: ${drawingTexts.length}个文本框, ${drawingImages.length}个图片`);
+    return { texts: drawingTexts, images: drawingImages };
   }
 
   /**
@@ -997,42 +990,25 @@ export class ExcelToTLDrawConverter {
             let base64String = '';
             
             try {
-              // 改进的Base64转换方法
-              try {
-                // 使用更安全的方法转换Base64
+              // 方法1: 直接使用btoa转换整个数组
+              if (uint8Array.length < 1000000) { // 小于1MB的文件直接转换
                 const binaryString = Array.from(uint8Array, byte => String.fromCharCode(byte)).join('');
                 base64String = btoa(binaryString);
-                console.log('Base64转换成功，长度:', base64String.length);
-              } catch (btoaError) {
-                console.warn('btoa转换失败，尝试分块转换:', btoaError);
-                // 分块转换作为备用方案
-                const chunkSize = 1024; // 减小块大小
-                base64String = '';
+                console.log('直接转换Base64成功，长度:', base64String.length);
+              } else {
+                // 大文件分块转换
+                const chunkSize = 8192; // 8KB chunks
                 for (let i = 0; i < uint8Array.length; i += chunkSize) {
                   const chunk = uint8Array.slice(i, i + chunkSize);
                   const chunkString = Array.from(chunk, byte => String.fromCharCode(byte)).join('');
-                  try {
-                    base64String += btoa(chunkString);
-                  } catch (chunkError) {
-                    console.warn(`分块${i}转换失败:`, chunkError);
-                    // 跳过有问题的块
-                    continue;
-                  }
+                  base64String += btoa(chunkString);
                 }
-                console.log('分块转换Base64完成，长度:', base64String.length);
+                console.log('分块转换Base64成功，长度:', base64String.length);
               }
               
               // 验证Base64字符串
               if (!base64String || base64String.length === 0) {
                 throw new Error('Base64字符串为空');
-              }
-              
-              // 验证Base64字符串格式
-              const base64Regex = /^[A-Za-z0-9+/]*={0,2}$/;
-              if (!base64Regex.test(base64String)) {
-                console.warn('Base64字符串格式不正确，尝试清理...');
-                // 清理无效字符
-                base64String = base64String.replace(/[^A-Za-z0-9+/=]/g, '');
               }
               
               // 检查Base64字符串是否完整（应该能被4整除）
@@ -1041,11 +1017,6 @@ export class ExcelToTLDrawConverter {
                 const padding = 4 - (base64String.length % 4);
                 base64String += '='.repeat(padding);
                 console.log('补齐Base64字符串，添加padding:', padding);
-              }
-              
-              // 最终验证Base64字符串
-              if (!base64Regex.test(base64String)) {
-                throw new Error('Base64字符串格式仍然不正确');
               }
               
             } catch (e) {
@@ -1070,10 +1041,7 @@ export class ExcelToTLDrawConverter {
               mimeType = 'image/png';
             }
             
-            // 压缩图片（如果超过100KB）
-            const compressedBase64 = await this.compressImage(base64String, 100, mimeType);
-            
-            imageUrl = `data:${mimeType};base64,${compressedBase64}`;
+            imageUrl = `data:${mimeType};base64,${base64String}`;
             
             // 验证URL格式
             if (!imageUrl.startsWith('data:image/') || !imageUrl.includes(';base64,')) {
@@ -1086,10 +1054,6 @@ export class ExcelToTLDrawConverter {
               throw new Error('Base64部分为空');
             }
             
-            // 记录压缩信息
-            const finalSizeKB = Math.round((base64Part.length * 3) / 4 / 1024);
-            console.log(`最终图片大小: ${finalSizeKB}KB`);
-            
             console.log('创建base64图片URL成功');
             console.log('URL长度:', imageUrl.length);
             console.log('Base64长度:', base64Part.length);
@@ -1101,12 +1065,8 @@ export class ExcelToTLDrawConverter {
               testImg.onload = () => {
                 console.log('Base64图片URL验证成功，图片尺寸:', testImg.width, 'x', testImg.height);
               };
-              testImg.onerror = (error) => {
-                console.error('Base64图片URL验证失败，图片无法加载:', error);
-                console.error('URL长度:', imageUrl.length);
-                console.error('URL预览:', imageUrl.substring(0, 200) + '...');
-                console.error('Base64部分长度:', base64Part.length);
-                console.error('Base64预览:', base64Part.substring(0, 100) + '...');
+              testImg.onerror = () => {
+                console.error('Base64图片URL验证失败，图片无法加载');
               };
               testImg.src = imageUrl;
             } catch (e) {
@@ -1114,8 +1074,6 @@ export class ExcelToTLDrawConverter {
             }
           } catch (e) {
             console.warn('base64转换失败，跳过此图片:', e);
-            console.warn('图片数据长度:', imageData.data ? imageData.data.length : '未知');
-            console.warn('图片类型:', imageData.type || '未知');
             continue; // 跳过这个图片，继续处理下一个
           }
           
@@ -1768,128 +1726,6 @@ export class ExcelToTLDrawConverter {
   }
 
   /**
-   * 将pt字号映射到TLDraw v3的size值
-   * @param {number} pt - 字号（pt）
-   * @returns {string} TLDraw v3的size值
-   */
-  mapFontSizeToTLDraw(pt) {
-    if (!pt || pt <= 0) return 's';
-    
-    // TLDraw v3的size映射规则
-    // 根据TLDraw官方文档，size值对应的大致字号：
-    // s: 小号 (约8-10pt)
-    // m: 中号 (约12-14pt) 
-    // l: 大号 (约16-18pt)
-    // xl: 超大号 (约20pt+)
-    
-    if (pt <= 10) return 's';
-    if (pt <= 14) return 'm';
-    if (pt <= 18) return 'l';
-    return 'xl';
-  }
-
-  /**
-   * 创建安全的富文本格式，避免空文本节点错误
-   * @param {string} text - 原始文本
-   * @returns {Object} 安全的富文本格式
-   */
-  createSafeRichText(text) {
-    return createSafeRichText(text);
-  }
-
-  /**
-   * 压缩图片到指定大小以内
-   * @param {string} base64String - 原始Base64字符串
-   * @param {number} maxSizeKB - 最大文件大小（KB）
-   * @param {string} mimeType - 图片MIME类型
-   * @returns {Promise<string>} 压缩后的Base64字符串
-   */
-  async compressImage(base64String, maxSizeKB = 100, mimeType = 'image/png') {
-    try {
-      // 计算原始文件大小
-      const originalSizeKB = Math.round((base64String.length * 3) / 4 / 1024);
-      console.log(`原始图片大小: ${originalSizeKB}KB`);
-      
-      // 如果已经小于目标大小，直接返回
-      if (originalSizeKB <= maxSizeKB) {
-        console.log(`图片已小于${maxSizeKB}KB，无需压缩`);
-        return base64String;
-      }
-      
-      // 创建图片对象
-      const img = new Image();
-      const imageUrl = `data:${mimeType};base64,${base64String}`;
-      
-      return new Promise((resolve, reject) => {
-        img.onload = () => {
-          try {
-            // 使用迭代压缩确保达到目标大小
-            let quality = 0.8;
-            let newWidth = img.width;
-            let newHeight = img.height;
-            let compressedBase64 = '';
-            let compressedSizeKB = originalSizeKB;
-            
-            // 首先尝试调整尺寸
-            const sizeRatio = Math.sqrt(maxSizeKB / originalSizeKB);
-            newWidth = Math.round(img.width * sizeRatio);
-            newHeight = Math.round(img.height * sizeRatio);
-            
-            console.log(`初始压缩: ${img.width}x${img.height} -> ${newWidth}x${newHeight}`);
-            
-            // 迭代调整质量直到达到目标大小
-            while (compressedSizeKB > maxSizeKB && quality > 0.1) {
-              const canvas = document.createElement('canvas');
-              const ctx = canvas.getContext('2d');
-              
-              canvas.width = newWidth;
-              canvas.height = newHeight;
-              
-              // 绘制压缩后的图片
-              ctx.drawImage(img, 0, 0, newWidth, newHeight);
-              
-              // 转换为Base64
-              compressedBase64 = canvas.toDataURL(mimeType, quality).split(',')[1];
-              compressedSizeKB = Math.round((compressedBase64.length * 3) / 4 / 1024);
-              
-              console.log(`质量 ${quality.toFixed(2)}: ${compressedSizeKB}KB`);
-              
-              if (compressedSizeKB > maxSizeKB) {
-                quality -= 0.1;
-                // 如果质量调整还不够，进一步缩小尺寸
-                if (quality <= 0.1) {
-                  newWidth = Math.round(newWidth * 0.8);
-                  newHeight = Math.round(newHeight * 0.8);
-                  quality = 0.8;
-                  console.log(`进一步缩小尺寸: ${newWidth}x${newHeight}`);
-                }
-              }
-            }
-            
-            console.log(`最终压缩结果: ${compressedSizeKB}KB (目标: ${maxSizeKB}KB)`);
-            console.log(`压缩率: ${((1 - compressedSizeKB / originalSizeKB) * 100).toFixed(1)}%`);
-            
-            resolve(compressedBase64);
-          } catch (error) {
-            console.warn('图片压缩失败，使用原始图片:', error);
-            resolve(base64String);
-          }
-        };
-        
-        img.onerror = () => {
-          console.warn('图片加载失败，使用原始Base64');
-          resolve(base64String);
-        };
-        
-        img.src = imageUrl;
-      });
-    } catch (error) {
-      console.warn('图片压缩过程出错，使用原始图片:', error);
-      return base64String;
-    }
-  }
-
-  /**
    * 解析Excel单元格颜色
    * @param {Object} color - ExcelJS颜色对象
    * @returns {string} 十六进制颜色值
@@ -2170,51 +2006,6 @@ export class ExcelToTLDrawConverter {
   }
 
   /**
-   * 可选：仅在"几乎完全在某 frame 内部"时贴齐
-   * @param {Object} element - 元素对象 {x, y, width, height}
-   * @param {Array} frames - 框架数组
-   * @returns {Object} 处理后的元素
-   */
-  maybeSnapToFrame(element, frames) {
-    if (!PRESERVE_EXCEL_LAYOUT || !frames || frames.length === 0) {
-      return element;
-    }
-
-    // 永久禁用图片的贴齐功能，避免被"挤进"容器导致裁切
-    if (element.type === 'image') {
-      console.log('永久跳过图片的frame贴齐，保持contain后的位置和尺寸');
-      return element;
-    }
-
-    const elArea = element.width * element.height;
-    let bestFrame = null;
-    let bestRatio = 0;
-
-    for (const frame of frames) {
-      const overlap = this._calculateOverlapArea(element, frame);
-      const ratio = overlap / elArea;
-      if (ratio > bestRatio) {
-        bestRatio = ratio;
-        bestFrame = frame;
-      }
-    }
-
-    // 只有当重叠比例≥95%时才贴齐
-    if (bestFrame && bestRatio >= SNAP_TO_FRAME_THRESHOLD) {
-      console.log(`元素与frame重叠度${(bestRatio * 100).toFixed(1)}%，进行贴齐对齐`);
-      return {
-        ...element,
-        x: bestFrame.x,
-        y: bestFrame.y,
-        width: bestFrame.width,
-        height: bestFrame.height
-      };
-    }
-
-    return element;
-  }
-
-  /**
    * 工具：找图片所属的所有容器（用于横跨多个格子的图片）
    * @param {Array} frames - 框架数组
    * @param {Object} img - 图片对象
@@ -2367,12 +2158,6 @@ export class ExcelToTLDrawConverter {
    * @param {number} padding - 内边距，默认4像素
    */
   _fitTextboxesIntoFrames(texts, frames, padding = 4) {
-    // Fidelity-first 模式：直接返回原始文本框，不做任何适配处理
-    if (PRESERVE_EXCEL_LAYOUT) {
-      console.log(`Fidelity-first模式：保持Excel原始布局，跳过文本框适配处理`);
-      return texts.map(text => this.maybeSnapToFrame(text, frames));
-    }
-
     console.log(`开始处理 ${texts.length} 个文字元素，${frames.length} 个框架`);
     
     for (let i = 0; i < texts.length; i++) {
@@ -2425,7 +2210,6 @@ export class ExcelToTLDrawConverter {
     }
     
     console.log('textbox适配完成');
-    return texts; // 返回处理后的文本框数组
   }
 
   /**
@@ -2435,12 +2219,6 @@ export class ExcelToTLDrawConverter {
    * @param {number} padding - 内边距，默认8像素
    */
   _fitImagesIntoFrames(images, frames, padding = 0) {
-    // Fidelity-first 模式：直接返回原始图片，不做任何适配处理
-    if (PRESERVE_EXCEL_LAYOUT) {
-      console.log(`Fidelity-first模式：保持Excel原始布局，跳过图片适配处理`);
-      return images.map(img => this.maybeSnapToFrame(img, frames));
-    }
-
     console.log(`开始处理 ${images.length} 张图片，${frames.length} 个框架`);
     
     for (let i = 0; i < images.length; i++) {
@@ -2524,7 +2302,6 @@ export class ExcelToTLDrawConverter {
     }
     
     console.log('图片尺寸调整完成');
-    return images; // 返回处理后的图片数组
   }
 
   /**
@@ -2542,16 +2319,11 @@ export class ExcelToTLDrawConverter {
         
         switch (shapeType) {
           case 'image':
-            // 图片：强制contain到锚点矩形，不允许超框
             // 先创建资产，再创建形状
             try {
               const assetId = `asset:${(globalThis.crypto?.randomUUID?.() || Math.random().toString(36).slice(2))}`;
               
-              // 1) 先把 asset 的天然尺寸设成原图尺寸（asset 只存元数据，不裁图）
-              const naturalW = element.originalWidth || element.width;
-              const naturalH = element.originalHeight || element.height;
-              
-              // 创建资产 - 使用原图天然尺寸
+              // 创建资产 - 使用原始图片尺寸
               this.editor.store.put([
                 {
                   id: assetId,
@@ -2559,61 +2331,44 @@ export class ExcelToTLDrawConverter {
                   typeName: "asset",
                   meta: {},
                   props: {
-                    w: naturalW,            // 用原图天然宽高
-                    h: naturalH,
+                    w: element.originalWidth,  // 使用原始尺寸
+                    h: element.originalHeight, // 使用原始尺寸
                     src: element.url,
                     name: `Excel图片_${Date.now()}`,
-                    mimeType: element.mimeType || 'image/png',
+                    mimeType: 'image/png',
                     isAnimated: false
                   }
                 }
               ]);
               
-              // 2) 计算在"Excel锚点矩形"内的等比缩放（不放大，只缩小）
-              const boxX = element.x * this.scale;
-              const boxY = element.y * this.scale;
-              const boxW = element.width * this.scale;
-              const boxH = element.height * this.scale;
+              // 验证图片坐标和尺寸
+              const imgX = element.x * this.scale;
+              const imgY = element.y * this.scale;
+              const imgW = element.width * this.scale;
+              const imgH = element.height * this.scale;
               
-              const scaleFit = Math.min(boxW / naturalW, boxH / naturalH, 1); // <=1，避免放大导致糊
-              const drawW = Math.round(naturalW * scaleFit * 100) / 100; // 提高精度
-              const drawH = Math.round(naturalH * scaleFit * 100) / 100; // 提高精度
-              
-              // 居中到锚点矩形内
-              const drawX = Math.round(boxX + (boxW - drawW) / 2);
-              const drawY = Math.round(boxY + (boxH - drawH) / 2);
-              
-              if (isNaN(drawX) || isNaN(drawY) || isNaN(drawW) || isNaN(drawH)) {
+              if (isNaN(imgX) || isNaN(imgY) || isNaN(imgW) || isNaN(imgH)) {
                 console.warn('图片元素坐标无效，跳过:', { 
                   element, 
-                  drawX, 
-                  drawY, 
-                  drawW, 
-                  drawH,
+                  imgX, 
+                  imgY, 
+                  imgW, 
+                  imgH,
                   scale: this.scale 
                 });
                 continue;
               }
               
-              // 3) 创建图片 shape（不设置任何 crop，不进 frame）
-              console.log(`创建图片形状: 等比缩放模式，原图(${naturalW}x${naturalH}) -> 显示(${drawW}x${drawH}), 位置(${drawX}, ${drawY})`);
-              
-              // 4) 验证断言：确保图片不超出锚点矩形
-              const exceedsAnchor = drawW > boxW + 0.5 || drawH > boxH + 0.5;
-              if (exceedsAnchor) {
-                console.error(`FITTING_BROKEN: image exceeds anchor rect - drawW:${drawW} > boxW:${boxW} or drawH:${drawH} > boxH:${boxH}`);
-              } else {
-                console.log(`✅ 图片尺寸验证通过: drawW:${drawW} <= boxW:${boxW}, drawH:${drawH} <= boxH:${boxH}`);
-              }
+              // 创建图片形状 - 使用计算出的显示尺寸，统一应用缩放
+              console.log(`创建图片形状: 显示尺寸(${imgW}x${imgH}), 位置(${imgX}, ${imgY})`);
               
               shape = {
                 type: 'image',
-                parentId: this.editor.getCurrentPageId(), // 明确在页面根
-                x: drawX,
-                y: drawY,
+                x: imgX,
+                y: imgY,
                 props: {
-                  w: drawW,
-                  h: drawH,
+                  w: imgW,   // 统一应用缩放
+                  h: imgH,  // 统一应用缩放
                   assetId: assetId
                 }
               };
@@ -2624,20 +2379,17 @@ export class ExcelToTLDrawConverter {
             break;
             
           case 'text':
-            // 文本：保留锚点矩形宽度触发换行，必要时跑shrink-and-refit字号逻辑
             // 验证坐标和尺寸是否为有效数字
             const textX = element.x * this.scale;
             const textY = element.y * this.scale;
             const textW = element.width * this.scale;
-            const textH = element.height * this.scale;
             
-            if (isNaN(textX) || isNaN(textY) || isNaN(textW) || isNaN(textH)) {
+            if (isNaN(textX) || isNaN(textY) || isNaN(textW)) {
               console.warn('文字元素坐标无效，跳过:', { 
                 element, 
                 textX, 
                 textY, 
                 textW,
-                textH,
                 scale: this.scale 
               });
               continue;
@@ -2645,85 +2397,50 @@ export class ExcelToTLDrawConverter {
             
             // 检查是否是textbox类型
             if (element.type === 'textbox') {
-              // 为textbox创建自适应文本
-              const textElement = {
-                x: textX,
-                y: textY,
-                width: textW,
-                height: textH,
-                text: element.text,
-                fontSize: element.fontSize || 12
-              };
+              // 为所有textbox创建不透明白底
+              const backgroundColor = element.fill?.color || '#FFFFFF'; // 默认白色背景
               
-              // 计算文本适配配置
-              const fitConfig = createTextFitConfig(textElement, {
-                basePt: element.fontSize || 12,
-                minPt: 8,
-                lineHeight: 1.35
-              });
-              
-              console.log(`文本框适配: 原字号${fitConfig.originalPt}pt -> 适配字号${fitConfig.fitPt}pt, 行数${fitConfig.lines.length}`);
-              
-              // 创建白底矩形（可选）
-              const backgroundColor = element.fill?.color || '#FFFFFF';
-              const backgroundShape = {
+              // 创建带背景的文本框（使用geo形状）
+              shape = {
                 type: 'geo',
                 x: textX,
                 y: textY,
                 props: {
                   geo: 'rectangle',
                   w: textW,
-                  h: textH,
+                  h: element.height * this.scale,
                   fill: 'solid',
                   color: this.mapColorToTLDraw(backgroundColor)
                 }
               };
               
-              // 创建自适应文本
+              // 在形状上添加文字
               const textShape = {
                 type: 'text',
                 x: textX + 4, // 稍微偏移避免贴边
                 y: textY + 4,
-                parentId: this.editor.getCurrentPageId(), // 不入frame，避免被裁剪
                 props: {
-                  w: Math.max(4, Math.round(textW - 8)), // 固定宽度触发换行，至少4px
-                  richText: this.createSafeRichText(fitConfig.softenedText), // 使用安全的富文本格式
-                  size: this.mapFontSizeToTLDraw(fitConfig.fitPt), // 映射到TLDraw v3的size值
+                  richText: toRichText(element.text),
+                  w: textW - 8,
+                  size: 's',
                   color: 'black'
                 }
               };
               
-              // 先创建背景，再创建文字
-              shapes.push(backgroundShape);
+              // 先创建背景形状，再创建文字
+              shapes.push(shape);
               shapes.push(textShape);
               continue;
             } else {
-              // 普通单元格文字（无背景，但也要适配）
-              const textElement = {
-                x: textX,
-                y: textY,
-                width: textW,
-                height: textH,
-                text: element.text,
-                fontSize: element.fontSize || 12
-              };
-              
-              // 计算文本适配配置
-              const fitConfig = createTextFitConfig(textElement, {
-                basePt: element.fontSize || 12,
-                minPt: 8,
-                lineHeight: 1.35
-              });
-              
+              // 普通单元格文字（无背景）
               shape = {
                 type: 'text',
                 x: textX,
                 y: textY,
-                parentId: this.editor.getCurrentPageId(), // 不入frame，避免被裁剪
                 props: {
-                  w: Math.max(4, Math.round(textW)), // 固定宽度触发换行，至少4px
-                  richText: this.createSafeRichText(fitConfig.softenedText), // 使用安全的富文本格式
-                  size: this.mapFontSizeToTLDraw(fitConfig.fitPt), // 映射到TLDraw v3的size值
+                  richText: toRichText(element.text),
+                  w: textW,
+                  size: 's',
                   color: 'black'
                 }
               };
@@ -2834,55 +2551,6 @@ export class ExcelToTLDrawConverter {
         }
       }
     }
-  }
-
-  /**
-   * 后处理文本形状：缩窄过于宽的文本框
-   * @param {Array} textElements - 文本元素数组
-   */
-  async postProcessTextShapes(textElements) {
-    if (!textElements || textElements.length === 0) {
-      return;
-    }
-
-    console.log(`开始后处理 ${textElements.length} 个文本形状...`);
-    
-    // 获取当前页面的所有文本形状
-    const currentPageShapes = this.editor.getCurrentPageShapes();
-    const textShapes = currentPageShapes.filter(shape => shape.type === 'text');
-    
-    console.log(`找到 ${textShapes.length} 个文本形状进行后处理`);
-    
-    for (const textShape of textShapes) {
-      try {
-        // 检查文本是否过宽（宽度 > 300px 或包含长串）
-        const currentWidth = textShape.props.w || 0;
-        const richText = textShape.props.richText;
-        const text = richText?.text || '';
-        
-        // 判断是否需要缩窄
-        const needsShrinking = currentWidth > 300 || 
-                              text.length > 50 || 
-                              /[A-Za-z0-9]{20,}/.test(text);
-        
-        if (needsShrinking) {
-          // 计算目标宽度（比当前宽度小20%，但至少100px）
-          const targetWidth = Math.max(100, Math.round(currentWidth * 0.8));
-          
-          console.log(`缩窄文本形状 ${textShape.id}: ${currentWidth}px -> ${targetWidth}px`);
-          
-          // 使用shrinkAndRefitTextShape进行缩窄
-          shrinkAndRefitTextShape(this.editor, textShape.id, targetWidth, {
-            minPt: 8,
-            lineHeight: 1.35
-          });
-        }
-      } catch (error) {
-        console.warn(`后处理文本形状 ${textShape.id} 失败:`, error);
-      }
-    }
-    
-    console.log('文本形状后处理完成');
   }
 
   /**
@@ -3006,30 +2674,21 @@ export class ExcelToTLDrawConverter {
       
       // 6. 跳过布局分析，直接使用原始位置
       console.log('跳过布局分析，使用原始位置...');
-      console.log('images变量:', images, '类型:', typeof images, '长度:', images?.length);
-      console.log('allTexts变量:', allTexts, '类型:', typeof allTexts, '长度:', allTexts?.length);
-      console.log('frames变量:', frames, '类型:', typeof frames, '长度:', frames?.length);
+      const adjustedImages = images;  // 直接使用原始图片位置
+      const adjustedTexts = allTexts; // 使用合并后的文字位置
+      const adjustedFrames = frames;  // 直接使用原始框架位置
       
-      let adjustedImages = images || [];  // 直接使用原始图片位置，提供默认值
-      let adjustedTexts = allTexts || []; // 使用合并后的文字位置，提供默认值
-      const adjustedFrames = frames || [];  // 直接使用原始框架位置，提供默认值
+      // 6.5. 先按容器把图片做"等比缩小且不放大"的自适应
+      console.log('开始调整图片尺寸以适应容器...');
+      this._fitImagesIntoFrames(adjustedImages, adjustedFrames, 0);
+      console.log('图片尺寸调整完成');
       
-      // 6.5. Fidelity-first模式：直接使用Excel锚点矩形，或进行容器适配
-      if (PRESERVE_EXCEL_LAYOUT) {
-        console.log('Fidelity-first模式：直接使用Excel锚点矩形，保持原始布局');
-        adjustedImages = this._fitImagesIntoFrames(adjustedImages, adjustedFrames, 0);
-        adjustedTexts = this._fitTextboxesIntoFrames(adjustedTexts, adjustedFrames, 4);
-      } else {
-        console.log('传统模式：调整图片尺寸以适应容器...');
-        adjustedImages = this._fitImagesIntoFrames(adjustedImages, adjustedFrames, 0);
-        console.log('图片尺寸调整完成');
-        
-        console.log('传统模式：调整textbox以适应容器...');
-        adjustedTexts = this._fitTextboxesIntoFrames(adjustedTexts, adjustedFrames, 4);
-        console.log('textbox适配完成');
-      }
+      // 6.6. 把textbox适配到格子内
+      console.log('开始调整textbox以适应容器...');
+      this._fitTextboxesIntoFrames(adjustedTexts, adjustedFrames, 4);
+      console.log('textbox适配完成');
       
-      // 7. 批量创建形状（按正确层级顺序：背景→边框→图片→文本）
+      // 7. 批量创建形状（按正确层级顺序）
       console.log('开始创建TLDraw形状...');
       
       // 1. 先创建背景色（最底层）
@@ -3038,7 +2697,7 @@ export class ExcelToTLDrawConverter {
         await this.createShapesBatch(backgrounds, 'background');
       }
       
-      // 2. 创建表格框（只是画线，不裁剪）
+      // 2. 创建表格框
       if (adjustedFrames.length > 0) {
         console.log('开始创建表格框形状...');
         try {
@@ -3048,7 +2707,7 @@ export class ExcelToTLDrawConverter {
         }
       }
       
-      // 3. 创建图片（放在框之上，不入frame）
+      // 3. 创建图片
       if (adjustedImages.length > 0) {
         console.log('开始创建图片形状...');
         await this.createShapesBatch(adjustedImages, 'image');
@@ -3058,10 +2717,6 @@ export class ExcelToTLDrawConverter {
       if (adjustedTexts.length > 0) {
         console.log('开始创建文字形状...');
         await this.createShapesBatch(adjustedTexts, 'text');
-        
-        // 5. 后处理：缩窄过于宽的文本框
-        console.log('开始后处理文本缩窄...');
-        await this.postProcessTextShapes(adjustedTexts);
       }
       
       // 7. 调整视图
