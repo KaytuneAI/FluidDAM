@@ -201,7 +201,7 @@ export default function IntegratedAssetSidebar({ editor, selectedFrame, setIsLoa
                   
                   // 重置视图
                   editor.resetZoom();
-                  editor.panTo(0, 0);
+                  editor.setCamera({ x: 0, y: 0, z: 1 });
                   console.log('已重置视图');
                   
                   console.log('画布重置成功！');

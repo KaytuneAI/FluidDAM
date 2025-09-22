@@ -37,7 +37,7 @@ function getMeasureContext(fontPx) {
     const canvas = document.createElement('canvas');
     measureContext = canvas.getContext('2d');
   }
-  measureContext.font = `${fontPx}px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif`;
+  measureContext.font = `${fontPx}px Arial, Helvetica, "Microsoft YaHei", "微软雅黑", "PingFang SC", "Hiragino Sans GB", "WenQuanYi Micro Hei", sans-serif`;
   return measureContext;
 }
 
@@ -137,7 +137,7 @@ export function measureParagraphHeight(text, width, fontPx, lineHeight = 1.35) {
  */
 export function fitFontSizeToBox(text, boxW, boxH, basePt, minPt = 8, lineHeight = 1.35) {
   if (!text || !boxW || !boxH || basePt <= 0) {
-    return Math.max(minPt, basePt);
+    return Math.max(minPt, 12); // 默认使用12px字体
   }
   
   let lo = minPt;
@@ -172,7 +172,7 @@ export function fitFontSizeToBox(text, boxW, boxH, basePt, minPt = 8, lineHeight
  */
 export function createTextFitConfig(element, options = {}) {
   const {
-    basePt = 12,
+    basePt = 12,  // 改为12px字体
     minPt = 8,
     lineHeight = 1.35
   } = options;

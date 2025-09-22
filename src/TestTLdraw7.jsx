@@ -1,5 +1,6 @@
 import React, { useMemo, useRef, useState, useEffect, useCallback } from "react";
 import { Tldraw, createTLStore, defaultShapeUtils, toRichText, loadSnapshot, getSnapshot } from "tldraw";
+import { initAllFontOverrides } from "./utils/fontOverride";
 
 // Helper: choose the **smallest containing frame** under pointer/viewport center
 function __fix_findTargetFrame(editor) {
@@ -1086,6 +1087,41 @@ export default function MinimalTldrawInsert() {
     };
   }, []);
 
+  // 字体覆盖 - 强制使用正式字体
+  useEffect(() => {
+    const cleanup = initAllFontOverrides();
+    return cleanup;
+  }, []);
+
+  // 动态注入CSS确保字体覆盖
+  useEffect(() => {
+    const style = document.createElement('style');
+    style.textContent = `
+      /* 强制覆盖所有字体 */
+      *, *::before, *::after {
+        font-family: Arial, Helvetica, "Microsoft YaHei", "微软雅黑", "PingFang SC", "Hiragino Sans GB", "WenQuanYi Micro Hei", sans-serif !important;
+        font-style: normal !important;
+        font-weight: normal !important;
+        font-size: 12px !important;
+      }
+      
+      /* 特别针对Tldraw */
+      .tl-text, .tl-text *, .tl-rich-text, .tl-rich-text *, .tl-text-content, .tl-text-content *,
+      .tl-text-editor, .tl-text-editor *, .tl-text-input, .tl-text-input *,
+      .tl-shape, .tl-shape *, [data-shape-type] *, [class*="tl-"] * {
+        font-family: Arial, Helvetica, "Microsoft YaHei", "微软雅黑", "PingFang SC", "Hiragino Sans GB", "WenQuanYi Micro Hei", sans-serif !important;
+        font-style: normal !important;
+        font-weight: normal !important;
+        font-size: 12px !important;
+      }
+    `;
+    document.head.appendChild(style);
+    
+    return () => {
+      document.head.removeChild(style);
+    };
+  }, []);
+
 
 
 
@@ -1285,7 +1321,7 @@ const sidebarStyles = {
   container: {
     height: "100%",
     overflow: "auto",
-    fontFamily: "Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif"
+    fontFamily: "Arial, Helvetica, Microsoft YaHei, 微软雅黑, PingFang SC, Hiragino Sans GB, WenQuanYi Micro Hei, sans-serif"
   },
   header: { padding: "10px 12px", borderBottom: "1px solid #e5e7eb", display: "flex", justifyContent: "space-between", alignItems: "center"},
   list: { padding: 12, display: "grid", gridTemplateColumns: "1fr", gap: 8 },

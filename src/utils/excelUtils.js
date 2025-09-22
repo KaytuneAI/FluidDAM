@@ -2284,30 +2284,99 @@ export class ExcelToTLDrawConverter {
         img.width = Math.round(dw);
         img.height = Math.round(dh);
       } else {
-        // 单格子图片：使用原来的逻辑
-        const s = Math.min(maxW / ow, maxH / oh, 1);
-        const dw = Math.round(ow * s);
-        const dh = Math.round(oh * s);
-
-        // 居中
-        const nx = combinedBounds.x + (combinedBounds.width - dw) / 2;
-        const ny = combinedBounds.y + (combinedBounds.height - dh) / 2;
-
-        // 边界检查：确保图片边框不超出合并边界
-        const finalX = Math.max(combinedBounds.x + padding, Math.min(nx, combinedBounds.x + combinedBounds.width - dw - padding));
-        const finalY = Math.max(combinedBounds.y + padding, Math.min(ny, combinedBounds.y + combinedBounds.height - dh - padding));
-
-        console.log(`图片 ${i + 1}: 单格子处理 - 缩放比例 ${s}, 新尺寸 ${dw}x${dh}, 计算位置 (${nx}, ${ny}), 最终位置 (${finalX}, ${finalY})`);
-
-        img.x = Math.round(finalX);
-        img.y = Math.round(finalY);
-        img.width = Math.round(dw);
-        img.height = Math.round(dh);
+        // 单格子图片：创建frame并使用fit to frame功能
+        console.log(`图片 ${i + 1}: 单格子图片，创建frame并使用fit to frame功能`);
+        
+        // 为这个图片创建一个与格子大小一致的frame
+        const cellFrame = {
+          x: combinedBounds.x,
+          y: combinedBounds.y,
+          width: combinedBounds.width,
+          height: combinedBounds.height,
+          type: 'frame',
+          id: `image-frame-${i}`,
+          name: `图片Frame ${i + 1}`
+        };
+        
+        // 将frame添加到frames数组中（如果还没有的话）
+        const existingFrame = frames.find(f => f.id === cellFrame.id);
+        if (!existingFrame) {
+          frames.push(cellFrame);
+          console.log(`图片 ${i + 1}: 创建了新的frame，尺寸 ${cellFrame.width}x${cellFrame.height}`);
+        }
+        
+        // 使用fit to frame功能将图片适配到frame中
+        const fittedImage = this._fitImageToFrame(img, cellFrame, padding);
+        
+        // 更新图片信息
+        img.x = fittedImage.x;
+        img.y = fittedImage.y;
+        img.width = fittedImage.width;
+        img.height = fittedImage.height;
+        img.frameId = cellFrame.id; // 记录关联的frame ID
+        
+        console.log(`图片 ${i + 1}: fit to frame完成 - 新尺寸 ${img.width}x${img.height}, 位置 (${img.x}, ${img.y})`);
       }
     }
     
     console.log('图片尺寸调整完成');
     return images; // 返回处理后的图片数组
+  }
+
+  /**
+   * 将图片适配到指定的frame中（contain模式）
+   * @param {Object} imageInfo - 图片信息对象
+   * @param {Object} frameRect - frame矩形 {x, y, width, height}
+   * @param {number} padding - 内边距，默认0像素
+   * @returns {Object} 适配后的图片位置和尺寸 {x, y, width, height}
+   */
+  _fitImageToFrame(imageInfo, frameRect, padding = 0) {
+    try {
+      // 获取原始图片尺寸
+      const originalWidth = Math.max(1, imageInfo.originalWidth || imageInfo.width || 1);
+      const originalHeight = Math.max(1, imageInfo.originalHeight || imageInfo.height || 1);
+
+      // 计算frame内的可用空间
+      const availableWidth = Math.max(1, frameRect.width - padding * 2);
+      const availableHeight = Math.max(1, frameRect.height - padding * 2);
+
+      // 计算contain缩放比例（不放大，只缩小）
+      const scaleX = availableWidth / originalWidth;
+      const scaleY = availableHeight / originalHeight;
+      const scale = Math.min(scaleX, scaleY, 1); // 不超过100%原图像素
+
+      // 计算适配后的尺寸
+      const fittedWidth = Math.round(originalWidth * scale);
+      const fittedHeight = Math.round(originalHeight * scale);
+
+      // 确保尺寸不为0（TLDraw v3要求）
+      const finalWidth = Math.max(1, fittedWidth);
+      const finalHeight = Math.max(1, fittedHeight);
+
+      // 在frame内居中
+      const fittedX = frameRect.x + (frameRect.width - finalWidth) / 2;
+      const fittedY = frameRect.y + (frameRect.height - finalHeight) / 2;
+
+      const result = {
+        x: Math.round(fittedX),
+        y: Math.round(fittedY),
+        width: finalWidth,
+        height: finalHeight
+      };
+
+      console.log(`图片适配到frame: 原图(${originalWidth}x${originalHeight}) -> 适配后(${result.width}x${result.height}), 位置(${result.x}, ${result.y})`);
+      return result;
+
+    } catch (error) {
+      console.warn('图片适配到frame失败:', error);
+      // 返回原始位置作为后备
+      return {
+        x: imageInfo.x || 0,
+        y: imageInfo.y || 0,
+        width: imageInfo.width || 100,
+        height: imageInfo.height || 100
+      };
+    }
   }
 
   /**
@@ -2328,6 +2397,32 @@ export class ExcelToTLDrawConverter {
             // 图片：强制contain到锚点矩形，不允许超框
             // 先创建资产，再创建形状
             try {
+              // 如果图片有关联的frame，先创建frame
+              if (element.frameId) {
+                // 查找对应的frame信息
+                const frameInfo = frames.find(f => f.id === element.frameId);
+                if (frameInfo) {
+                  // 创建frame形状
+                  const frameShape = {
+                    type: 'frame',
+                    x: frameInfo.x * this.scale,
+                    y: frameInfo.y * this.scale,
+                    props: {
+                      w: frameInfo.width * this.scale,
+                      h: frameInfo.height * this.scale,
+                      name: frameInfo.name || `图片Frame ${frameCounter + 1}`
+                    }
+                  };
+                  
+                  // 先创建frame
+                  const frameId = this.editor.createShape(frameShape);
+                  console.log(`创建了图片frame: ${frameId}`);
+                  
+                  // 更新frame信息，添加实际的frame ID
+                  frameInfo.tldrawId = frameId;
+                }
+              }
+              
               const assetId = `asset:${(globalThis.crypto?.randomUUID?.() || Math.random().toString(36).slice(2))}`;
               
               // 1) 先把 asset 的天然尺寸设成原图尺寸（asset 只存元数据，不裁图）
@@ -2393,9 +2488,20 @@ export class ExcelToTLDrawConverter {
                 // console.log(`✅ 图片尺寸验证通过: finalW:${finalW} <= boxW:${boxW}, finalH:${finalH} <= boxH:${boxH}`);
               }
               
+              // 检查是否有关联的frame
+              let parentId = this.editor.getCurrentPageId(); // 默认在页面根
+              if (element.frameId) {
+                // 如果图片有关联的frame，将图片放在frame内
+                const frameInfo = frames.find(f => f.id === element.frameId);
+                if (frameInfo && frameInfo.tldrawId) {
+                  parentId = frameInfo.tldrawId;
+                  console.log(`图片将放置在frame内: ${frameInfo.tldrawId}`);
+                }
+              }
+              
               shape = {
                 type: 'image',
-                parentId: this.editor.getCurrentPageId(), // 明确在页面根
+                parentId: parentId,
                 x: drawX,
                 y: drawY,
                 props: {

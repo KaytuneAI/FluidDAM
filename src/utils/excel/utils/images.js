@@ -500,8 +500,8 @@ export function getImageTextOverlays(images) {
         y: bannerY,
         width: imageWidth,
         height: bannerHeight,
-        fontSize: 16,
-        fontFamily: 'Arial',
+        fontSize: 12,
+        fontFamily: 'Arial, Helvetica, "Microsoft YaHei", "微软雅黑", "PingFang SC", "Hiragino Sans GB", "WenQuanYi Micro Hei", sans-serif',
         color: '#000000',
         backgroundColor: '#FFFFFF',
         type: 'banner'

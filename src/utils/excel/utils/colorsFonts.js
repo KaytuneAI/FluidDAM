@@ -70,19 +70,8 @@ export function mapColorToTLDraw(hexColor) {
  * @returns {string} TLDraw v3的size值
  */
 export function mapFontSizeToTLDraw(pt) {
-  if (!pt || pt <= 0) return 's';
-  
-  // TLDraw v3的size映射规则
-  // 根据TLDraw官方文档，size值对应的大致字号：
-  // s: 小号 (约8-10pt)
-  // m: 中号 (约12-14pt) 
-  // l: 大号 (约16-18pt)
-  // xl: 超大号 (约20pt+)
-  
-  if (pt <= 10) return 's';
-  if (pt <= 14) return 'm';
-  if (pt <= 18) return 'l';
-  return 'xl';
+  // 强制所有字体都使用中号(m) - 对应12px
+  return 'm';
 }
 
 // 重新导出createSafeRichText函数

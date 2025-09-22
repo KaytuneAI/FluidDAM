@@ -49,7 +49,7 @@ export default function MinimalTldrawInsert() {
         
         // 重置视图
         editorRef.current.resetZoom();
-        editorRef.current.panTo(0, 0);
+        editorRef.current.setCamera({ x: 0, y: 0, z: 1 });
         
         // 新画布创建完成
         
@@ -394,7 +394,7 @@ export default function MinimalTldrawInsert() {
             
             // 重置视图
             editorRef.current.resetZoom();
-            editorRef.current.panTo(0, 0);
+            editorRef.current.setCamera({ x: 0, y: 0, z: 1 });
             console.log('已重置视图');
             
             console.log('画布重置成功！');

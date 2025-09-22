@@ -1107,7 +1107,7 @@ export default function MinimalTldrawInsert() {
           borderLeft: "1px solid #e5e7eb",
           height: "100%",
           overflow: "auto",
-          fontFamily: "Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif",
+          fontFamily: "Arial, Helvetica, Microsoft YaHei, 微软雅黑, PingFang SC, Hiragino Sans GB, WenQuanYi Micro Hei, sans-serif",
           background: "#fff"
         }}>
           <AssetSidebarContent editor={editorRef.current} platform="TM" />
@@ -1141,7 +1141,7 @@ const sidebarStyles = {
     borderLeft: "1px solid #e5e7eb",
     height: "100%",
     overflow: "auto",
-    fontFamily: "Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif"
+    fontFamily: "Arial, Helvetica, Microsoft YaHei, 微软雅黑, PingFang SC, Hiragino Sans GB, WenQuanYi Micro Hei, sans-serif"
   },
   header: { padding: "10px 12px", borderBottom: "1px solid #e5e7eb", display: "flex", justifyContent: "space-between", alignItems: "center"},
   list: { padding: 12, display: "grid", gridTemplateColumns: "1fr", gap: 8 },

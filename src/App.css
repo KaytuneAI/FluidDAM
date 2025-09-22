@@ -91,3 +91,83 @@ div.tl-frame-heading-hit-area {
   left: -9999px !important;
   top: -9999px !important;
 }
+
+/* 强制使用正式字体，覆盖Tldraw默认的手写体 */
+.tl-text,
+.tl-text-shape,
+[data-shape-type="text"] *,
+.tl-rich-text,
+.tl-rich-text *,
+.tl-text-content,
+.tl-text-content * {
+  font-family: "Arial", "Helvetica", "Microsoft YaHei", "微软雅黑", "PingFang SC", "Hiragino Sans GB", "WenQuanYi Micro Hei", sans-serif !important;
+  font-style: normal !important;
+  font-weight: normal !important;
+  font-size: 12px !important;
+}
+
+/* 覆盖Tldraw的文本编辑器字体 */
+.tl-text-editor,
+.tl-text-editor *,
+.tl-text-input,
+.tl-text-input * {
+  font-family: "Arial", "Helvetica", "Microsoft YaHei", "微软雅黑", "PingFang SC", "Hiragino Sans GB", "WenQuanYi Micro Hei", sans-serif !important;
+  font-style: normal !important;
+  font-weight: normal !important;
+  font-size: 12px !important;
+}
+
+/* 覆盖所有可能的文本元素 */
+.tl-shape[data-shape-type="text"] *,
+.tl-shape[data-shape-type="text"] .tl-text,
+.tl-shape[data-shape-type="text"] .tl-rich-text {
+  font-family: "Arial", "Helvetica", "Microsoft YaHei", "微软雅黑", "PingFang SC", "Hiragino Sans GB", "WenQuanYi Micro Hei", sans-serif !important;
+  font-style: normal !important;
+  font-weight: normal !important;
+  font-size: 12px !important;
+}
+
+/* 强制覆盖所有英文字体，防止手写体 */
+* {
+  font-family: "Arial", "Helvetica", "Microsoft YaHei", "微软雅黑", "PingFang SC", "Hiragino Sans GB", "WenQuanYi Micro Hei", sans-serif !important;
+  font-size: 12px !important;
+}
+
+/* 特别针对Tldraw的所有文本元素 */
+.tl-text,
+.tl-text *,
+.tl-rich-text,
+.tl-rich-text *,
+.tl-text-content,
+.tl-text-content *,
+.tl-text-editor,
+.tl-text-editor *,
+.tl-text-input,
+.tl-text-input *,
+.tl-shape,
+.tl-shape *,
+[class*="tl-"] *,
+[data-shape-type] *,
+.tl-canvas *,
+.tl-overlays *,
+.tl-ui * {
+  font-family: "Arial", "Helvetica", "Microsoft YaHei", "微软雅黑", "PingFang SC", "Hiragino Sans GB", "WenQuanYi Micro Hei", sans-serif !important;
+  font-style: normal !important;
+  font-weight: normal !important;
+  text-decoration: none !important;
+  font-size: 12px !important;
+}
+
+/* 覆盖可能的cursive和handwriting字体 */
+*[style*="font-family"] {
+  font-family: "Arial", "Helvetica", "Microsoft YaHei", "微软雅黑", "PingFang SC", "Hiragino Sans GB", "WenQuanYi Micro Hei", sans-serif !important;
+  font-size: 12px !important;
+}
+
+/* 强制覆盖所有可能的字体变体 */
+* {
+  font-variant: normal !important;
+  font-stretch: normal !important;
+  font-kerning: auto !important;
+  font-feature-settings: normal !important;
+}
