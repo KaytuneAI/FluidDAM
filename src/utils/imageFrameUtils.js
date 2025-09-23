@@ -98,18 +98,23 @@ export function createFrameFromImageAnchor(drawing, rowOffsets, colOffsets, getC
  */
 export function placeImageIntoFrame(imageInfo, frameRect, padding = 0) {
   try {
+    // 项目级常量：内边距和描边
+    const CELL_PADDING = 8;
+    const FRAME_STROKE = 1;
+    const totalPadding = padding + CELL_PADDING + FRAME_STROKE;
+    
     // 获取原始图片尺寸
     const originalWidth = Math.max(1, imageInfo.originalWidth || imageInfo.width || 1);
     const originalHeight = Math.max(1, imageInfo.originalHeight || imageInfo.height || 1);
 
-    // 计算frame内的可用空间
-    const availableWidth = Math.max(1, frameRect.width - padding * 2);
-    const availableHeight = Math.max(1, frameRect.height - padding * 2);
+    // 计算frame内的可用空间（统一预留内边距与描边）
+    const availableWidth = Math.max(1, frameRect.width - totalPadding * 2);
+    const availableHeight = Math.max(1, frameRect.height - totalPadding * 2);
 
-    // 计算contain缩放比例（不放大，只缩小）
+    // 计算contain缩放比例（允许放大到贴满frame）
     const scaleX = availableWidth / originalWidth;
     const scaleY = availableHeight / originalHeight;
-    const scale = Math.min(scaleX, scaleY, 1); // 不超过100%原图像素
+    const scale = Math.min(scaleX, scaleY); // 移除,1限制，允许放大到贴满
 
     // 计算适配后的尺寸
     const fittedWidth = Math.round(originalWidth * scale);
@@ -130,7 +135,7 @@ export function placeImageIntoFrame(imageInfo, frameRect, padding = 0) {
       height: finalHeight
     };
 
-    console.log(`图片适配到frame: 原图(${originalWidth}x${originalHeight}) -> 适配后(${result.width}x${result.height}), 位置(${result.x}, ${result.y})`);
+    console.log(`图片适配到frame: 原图(${originalWidth}x${originalHeight}) -> 适配后(${result.width}x${result.height}), 位置(${result.x}, ${result.y}), 缩放比例: ${scale.toFixed(3)}`);
     return result;
 
   } catch (error) {
