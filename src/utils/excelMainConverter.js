@@ -148,24 +148,8 @@ export class ExcelMainConverter {
       let adjustedTexts = allTexts || []; // 使用合并后的文字位置，提供默认值
       const adjustedFrames = frames || [];  // 直接使用原始框架位置，提供默认值
       
-      // 6.5. 新逻辑：为每张图片生成对应的frame，然后适配图片到frame中
-      const { adjustedImages: processedImages, imageFrames } = this.dependencies.processImagesWithFrames(
-        adjustedImages, 
-        this.dependencies.createFrameFromImageAnchor, 
-        this.dependencies.placeImageIntoFrame
-      );
-      
-      // 更新调整后的图片数组
-      adjustedImages.length = 0;
-      adjustedImages.push(...processedImages);
-      
-      // 将图片frame添加到总的frame数组中
-      adjustedFrames.push(...imageFrames);
-      console.log(`生成了${imageFrames.length}个图片frame，总共${adjustedFrames.length}个frame`);
-      
-      // 处理textbox适配
-      adjustedTexts = this.dependencies.fitTextboxesIntoFrames(adjustedTexts, adjustedFrames, 4);
-      console.log('textbox适配完成');
+      // 6.5. 跳过frame处理，直接使用原始图片位置
+      console.log('跳过frame处理，直接使用原始图片位置和尺寸');
       
       // 7. 批量创建形状（按正确层级顺序：背景→边框→图片→文本）
       console.log('开始创建TLDraw形状...');

@@ -48,16 +48,7 @@ import {
   getImageTextOverlays,
 } from './excel/utils/images.js';
 
-// 导入图片frame处理工具
-import {
-  createFrameFromImageAnchor,
-  placeImageIntoFrame,
-  processImagesWithFrames,
-  createImageFrameShape,
-  addFrameInfoToImage,
-  isImageWithinFrame,
-  calculateImageScale
-} from './imageFrameUtils.js';
+// 已删除frame处理工具导入
 
 // 导入图片处理模块
 import { ExcelImageProcessor } from './excelImageProcessor.js';
@@ -131,9 +122,7 @@ export class ExcelToTLDrawConverter {
       extractTexts: this.extractTexts.bind(this),
       extractCellBackgrounds: this.extractCellBackgrounds.bind(this),
       extractFrames: this.extractFrames.bind(this),
-      processImagesWithFrames: processImagesWithFrames,
-      createFrameFromImageAnchor: createFrameFromImageAnchor,
-      placeImageIntoFrame: placeImageIntoFrame,
+      // 已删除frame处理函数依赖
       fitTextboxesIntoFrames: this._fitTextboxesIntoFrames.bind(this),
       createShapesBatch: this.createShapesBatch.bind(this),
       postProcessTextShapes: this.postProcessTextShapes.bind(this)

@@ -3,7 +3,7 @@
  * 负责从Excel文件中提取、处理和适配图片
  */
 
-import { createFrameFromImageAnchor, placeImageIntoFrame, addFrameInfoToImage } from './imageFrameUtils.js';
+// 已删除frame处理工具导入，直接在类中实现位置计算
 
 /**
  * Excel图片处理器类
@@ -169,10 +169,8 @@ export class ExcelImageProcessor {
           // 计算图片位置和尺寸
           const imageInfo = await this._calculateImagePosition(image, worksheet, imageUrl);
           
-          // 添加frame信息
-          const finalImageInfo = addFrameInfoToImage(imageInfo, null, images.length);
-          
-          images.push(finalImageInfo);
+          // 直接使用图片信息，不添加frame信息
+          images.push(imageInfo);
         } catch (error) {
           console.warn('处理图片失败:', error);
         }
@@ -425,76 +423,82 @@ export class ExcelImageProcessor {
    * @returns {Object} 图片信息对象
    */
   async _calculateImagePosition(image, worksheet, imageUrl) {
-    // 新逻辑：先根据Excel图片锚点生成对应的frame
-    let frameRect = null;
+    // 直接计算图片位置和尺寸，不使用frame概念
     let x = 0, y = 0, width = 0, height = 0;
     
     if (image.range) {
-      // 创建包含worksheet信息的drawing对象
-      const drawingWithWorksheet = {
-        range: image.range,
-        worksheet: worksheet
-      };
-      
-      // 计算行列偏移量
-      const offsets = this.calculateOffsets(worksheet);
-      
-      // 生成frame矩形
-      frameRect = createFrameFromImageAnchor(drawingWithWorksheet, offsets.rowOffsets, offsets.colOffsets, this.getCellPixelBoundsPrecise.bind(this));
-      
-      if (frameRect) {
-        // 使用frame的位置和尺寸作为图片的容器
-        x = frameRect.x;
-        y = frameRect.y;
-        width = frameRect.width;
-        height = frameRect.height;
-      } else {
-        // 如果frame生成失败，回退到原来的逻辑
-        console.warn('frame生成失败，使用原始锚点计算');
+      const range = image.range;
+      const tl = range.tl;
+      // 分别处理 br 和 ext 两种不同的格式
+
+      if (tl) {
+        // 计算左上角位置
+        const tlCellBounds = this.getCellPixelBoundsPrecise(tl.row, tl.col, worksheet);
         
-        if (image.range.tl && image.range.br) {
-          const anchor = image.range;
-          const tl = anchor.tl;
-          const br = anchor.br;
+        // EMU到像素的转换函数
+        const emuToPx = (emu) => {
+          if (!emu || emu === 0) return 0;
+          const numEmu = typeof emu === 'number' ? emu : parseFloat(emu);
+          if (isNaN(numEmu)) return 0;
+          // 1英寸 = 914400 EMU, 1英寸 = 96像素
+          return (numEmu * 96) / 914400;
+        };
+
+        // 计算图片的左上角位置（包含native偏移）
+        x = tlCellBounds.x + emuToPx(tl.nativeColOffset);
+        y = tlCellBounds.y + emuToPx(tl.nativeRowOffset);
+
+        if (range.br) {
+          // 有右下角锚点，计算完整尺寸
+          const brCellBounds = this.getCellPixelBoundsPrecise(range.br.row, range.br.col, worksheet);
+          const brX = brCellBounds.x + emuToPx(range.br.nativeColOffset);
+          const brY = brCellBounds.y + emuToPx(range.br.nativeRowOffset);
           
-          // 计算左上角位置（包含native偏移）
-          const tlCellBounds = this.getCellPixelBoundsPrecise(tl.row, tl.col, worksheet);
-          const brCellBounds = this.getCellPixelBoundsPrecise(br.row, br.col, worksheet);
-          
-          // 将native偏移从Excel单位转换为像素
-          const emuToPx = (emu) => {
-            if (!emu || emu === 0) return 0;
-            const numEmu = typeof emu === 'number' ? emu : parseFloat(emu);
-            if (isNaN(numEmu)) return 0;
-            return (numEmu * 96) / 914400;
-          };
-          
-          // 计算真实位置和尺寸
-          x = tlCellBounds.x + emuToPx(tl.nativeColOffset);
-          y = tlCellBounds.y + emuToPx(tl.nativeRowOffset);
-          
-          // 计算右下角位置
-          const brX = brCellBounds.x + emuToPx(br.nativeColOffset);
-          const brY = brCellBounds.y + emuToPx(br.nativeRowOffset);
-          
-          // 计算真实显示尺寸
           width = brX - x;
           height = brY - y;
+          console.log(`使用br锚点计算尺寸: ${width}x${height}`);
+        } else if (range.ext && (range.ext.cx || range.ext['@_cx'])) {
+          // 有扩展尺寸，直接使用ext的cx和cy
+          // 兼容两种属性名格式：cx/cy 和 @_cx/@_cy
+          const extWidth = range.ext.cx || range.ext['@_cx'];
+          const extHeight = range.ext.cy || range.ext['@_cy'];
           
-          console.log(`图片锚点定位: tl(${tl.row},${tl.col}) br(${br.row},${br.col})`);
-          console.log(`计算位置: (${x},${y}) 尺寸: ${width}x${height}`);
-        } else if (image.range.tl) {
-          // 如果没有br锚点，回退到只使用tl锚点
-          const anchor = image.range;
-          const row = anchor.tl.row;
-          const col = anchor.tl.col;
+          width = emuToPx(extWidth);
+          height = emuToPx(extHeight);
+          console.log(`使用ext扩展尺寸: ${width}x${height} (原始值:${extWidth}x${extHeight})`);
+        } else {
+          // 没有右下角锚点，使用更合理的默认尺寸
+          // 根据图片原始尺寸计算合适的显示尺寸
+          const cellWidth = tlCellBounds.width;
+          const cellHeight = tlCellBounds.height;
           
-          const cellBounds = this.getCellPixelBoundsPrecise(row, col, worksheet);
-          x = cellBounds.x;
-          y = cellBounds.y;
+          // 使用原始图片尺寸的缩放版本，但至少占据2-3个单元格
+          const minDisplayWidth = cellWidth * 2;  // 至少2个单元格宽
+          const minDisplayHeight = cellHeight * 3; // 至少3个单元格高
           
-          console.log(`图片基础位置: 行${row}列${col}, 位置:(${x},${y})`);
+          width = minDisplayWidth;
+          height = minDisplayHeight;
+          
+          console.log(`无右下角锚点，使用默认显示尺寸: ${width}x${height} (基于单元格${cellWidth}x${cellHeight})`);
         }
+
+        // 确保尺寸不会太小
+        if (width <= 50 || height <= 50) {
+          console.warn('计算出的图片尺寸太小，使用最小显示尺寸');
+          width = Math.max(120, width);  // 最小120px宽
+          height = Math.max(100, height); // 最小100px高
+        }
+
+        // 确保尺寸为正数
+        width = Math.max(1, width);
+        height = Math.max(1, height);
+
+        // 兼容两种ext属性名格式的日志输出
+        const extInfo = range.ext ? 
+          `${range.ext.cx || range.ext['@_cx'] || '无'}x${range.ext.cy || range.ext['@_cy'] || '无'}` : 
+          '无';
+        console.log(`图片锚点定位: tl(${tl.row},${tl.col}) br(${range.br?.row || '无'},${range.br?.col || '无'}) ext(${extInfo})`);
+        console.log(`计算位置: (${Math.round(x)},${Math.round(y)}) 尺寸: ${Math.round(width)}x${Math.round(height)}`);
       }
     }
     
@@ -521,37 +525,27 @@ export class ExcelImageProcessor {
       console.warn('分析Base64图片尺寸失败:', error);
     }
     
-    // 如果没有通过锚点计算出显示尺寸，使用原始尺寸作为后备
-    if (width === 0 || height === 0) {
+    // 使用单元格高度作为参考，等比例缩放图片
+    console.log(`📐 锚点尺寸: ${width}x${height}`);
+    console.log(`📐 原始尺寸: ${originalWidth}x${originalHeight}px`);
+    
+    if (width > 0 && height > 0) {
+      // 有锚点尺寸，使用锚点高度作为目标高度
+      const targetHeight = height;
+      const aspectRatio = originalWidth / originalHeight;
+      
+      // 根据宽高比计算对应的宽度
+      const scaledWidth = Math.round(targetHeight * aspectRatio);
+      
+      width = scaledWidth;
+      height = targetHeight;
+      
+      console.log(`✅ 适配到单元格高度: ${targetHeight}px, 等比例缩放后尺寸: ${width}x${height}`);
+    } else {
+      // 没有锚点尺寸，使用原始尺寸
       width = originalWidth;
       height = originalHeight;
-      console.log(`使用原始图片尺寸作为后备: ${width}x${height}`);
-    } else {
-      // 优化锚点缩放：确保整个图片被缩放，而不是裁剪
-      const anchorAspectRatio = width / height;
-      const originalAspectRatio = originalWidth / originalHeight;
-      
-      console.log(`📐 锚点尺寸: ${width}x${height} (比例: ${anchorAspectRatio.toFixed(3)})`);
-      console.log(`📐 原始尺寸: ${originalWidth}x${originalHeight}px (比例: ${originalAspectRatio.toFixed(3)})`);
-      
-      // 使用contain模式：保持图片完整，适配到锚点区域内
-      if (Math.abs(anchorAspectRatio - originalAspectRatio) > 0.01) {
-        // 比例不同，需要调整
-        const scaleX = width / originalWidth;
-        const scaleY = height / originalHeight;
-        const scale = Math.min(scaleX, scaleY); // 使用较小的缩放比例确保图片完整
-        
-        const newWidth = Math.round(originalWidth * scale);
-        const newHeight = Math.round(originalHeight * scale);
-        
-        console.log(`🔄 优化缩放: ${originalWidth}x${originalHeight} -> ${newWidth}x${newHeight} (缩放比例: ${scale.toFixed(3)})`);
-        console.log(`📏 保持图片完整，避免裁剪`);
-        
-        width = newWidth;
-        height = newHeight;
-      } else {
-        console.log(`✅ 比例匹配，直接使用锚点尺寸`);
-      }
+      console.log(`⚠️ 无锚点信息，使用原始图片尺寸: ${width}x${height}`);
     }
     
     // 详细记录图片尺寸信息
