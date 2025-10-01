@@ -2,6 +2,7 @@ import React, { useRef } from "react";
 import { loadSnapshot } from "tldraw";
 import ExcelJS from 'exceljs';
 import { toRichText } from 'tldraw';
+import storageManager from '../utils/storageManager.js';
 
 export default function LoadCanvasButton({ editor, setIsLoading }) {
   const fileInputRef = useRef(null);
@@ -76,6 +77,70 @@ export default function LoadCanvasButton({ editor, setIsLoading }) {
       
       // 6. 处理布局数据并创建形状
       await processLayoutData(layoutData, file);
+      
+      // 6.5 触发自动保存，确保导入的内容被保存
+      setTimeout(async () => {
+        try {
+          console.log('===== Excel导入完成后触发自动保存 =====');
+          const { getSnapshot } = await import('tldraw');
+          const canvasData = getSnapshot(editor.store);
+          const currentPageId = editor.getCurrentPageId();
+          const currentShapes = editor.getCurrentPageShapes();
+          const imageShapes = currentShapes.filter(shape => shape.type === 'image');
+          const viewport = editor.getViewportPageBounds();
+          const camera = editor.getCamera();
+          
+          console.log('准备保存的数据:', {
+            shapesCount: currentShapes.length,
+            shapes: currentShapes.map(s => ({ id: s.id, type: s.type })),
+            imageCount: imageShapes.length
+          });
+          
+          // 检查快照中的形状
+          if (canvasData && canvasData.store) {
+            const shapesInSnapshot = Object.keys(canvasData.store).filter(key => 
+              key.startsWith('shape:') && !key.includes('pointer')
+            );
+            console.log('快照中的形状数量:', shapesInSnapshot.length);
+          }
+          
+          const autoSaveData = {
+            canvasData,
+            currentPageId,
+            imageInfo: imageShapes.map(shape => ({ shapeId: shape.id })),
+            viewport: {
+              x: viewport.x,
+              y: viewport.y,
+              width: viewport.width,
+              height: viewport.height
+            },
+            camera: {
+              x: camera.x,
+              y: camera.y,
+              z: camera.z
+            },
+            version: '1.0',
+            timestamp: Date.now(),
+            autoSave: true,
+            source: 'excel-import' // 标记数据来源
+          };
+          
+              // 使用智能存储管理器保存（支持 IndexedDB 大容量）
+              const result = await storageManager.saveCanvas(autoSaveData);
+              
+              if (result.success) {
+                console.log(`✅ Excel导入后自动保存完成 (${result.method}, ${result.size}MB)，形状数量:`, currentShapes.length);
+                console.log('=====================================');
+              } else {
+                console.error('❌ Excel导入后自动保存失败:', result.error);
+                if (parseFloat(result.size) > 10) {
+                  alert(`Excel 数据太大 (${result.size}MB)，无法自动保存。\n刷新后将无法恢复，请使用"保存画布"按钮手动保存为文件。`);
+                }
+              }
+        } catch (saveError) {
+          console.error('❌ Excel导入后自动保存失败:', saveError);
+        }
+      }, 1500); // 增加等待时间到 1.5 秒
       
       // 7. 移除加载提示
       document.body.removeChild(loadingMessage);
@@ -485,6 +550,70 @@ export default function LoadCanvasButton({ editor, setIsLoading }) {
             const currentImageIds = saveData.imageInfo.map(img => img.shapeId);
             localStorage.setItem('currentImageIds', JSON.stringify(currentImageIds));
           }
+          
+          // 4.5 触发自动保存，确保加载的内容被保存
+          setTimeout(async () => {
+            try {
+              console.log('===== 加载完成后触发自动保存 =====');
+              const { getSnapshot } = await import('tldraw');
+              const canvasData = getSnapshot(editor.store);
+              const currentPageId = editor.getCurrentPageId();
+              const currentShapes = editor.getCurrentPageShapes();
+              const imageShapes = currentShapes.filter(shape => shape.type === 'image');
+              const viewport = editor.getViewportPageBounds();
+              const camera = editor.getCamera();
+              
+              console.log('准备保存的数据:', {
+                shapesCount: currentShapes.length,
+                shapes: currentShapes.map(s => ({ id: s.id, type: s.type })),
+                imageCount: imageShapes.length
+              });
+              
+              // 检查快照中的形状
+              if (canvasData && canvasData.store) {
+                const shapesInSnapshot = Object.keys(canvasData.store).filter(key => 
+                  key.startsWith('shape:') && !key.includes('pointer')
+                );
+                console.log('快照中的形状数量:', shapesInSnapshot.length);
+              }
+              
+              const autoSaveData = {
+                canvasData,
+                currentPageId,
+                imageInfo: imageShapes.map(shape => ({ shapeId: shape.id })),
+                viewport: {
+                  x: viewport.x,
+                  y: viewport.y,
+                  width: viewport.width,
+                  height: viewport.height
+                },
+                camera: {
+                  x: camera.x,
+                  y: camera.y,
+                  z: camera.z
+                },
+                version: '1.0',
+                timestamp: Date.now(),
+                autoSave: true,
+                source: 'json-load' // 标记数据来源
+              };
+              
+              // 使用智能存储管理器保存（支持 IndexedDB 大容量）
+              const result = await storageManager.saveCanvas(autoSaveData);
+              
+              if (result.success) {
+                console.log(`✅ JSON加载后自动保存完成 (${result.method}, ${result.size}MB)，形状数量:`, currentShapes.length);
+                console.log('=====================================');
+              } else {
+                console.error('❌ JSON加载后自动保存失败:', result.error);
+                if (parseFloat(result.size) > 10) {
+                  alert(`画布数据太大 (${result.size}MB)，无法自动保存。\n刷新后将无法恢复，请使用"保存画布"按钮手动保存为文件。`);
+                }
+              }
+            } catch (saveError) {
+              console.error('❌ 加载后自动保存失败:', saveError);
+            }
+          }, 1500); // 增加等待时间到 1.5 秒
           
           // 5. 恢复保存的页面状态
           if (saveData.currentPageId) {

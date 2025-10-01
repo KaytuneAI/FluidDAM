@@ -2,6 +2,7 @@ import React, { useMemo, useRef, useState, useEffect, useCallback } from "react"
 import { Tldraw, createTLStore, defaultShapeUtils, getSnapshot, createTLStore as createStore } from "tldraw";
 import "tldraw/tldraw.css";
 import { getApiBaseUrl } from './utils/apiUtils.js';
+import storageManager from './utils/storageManager.js';
 
 // 导入组件
 import ResizableSidebar from './components/ResizableSidebar.jsx';
@@ -18,6 +19,19 @@ if (!document.head.querySelector('style[data-highlight]')) {
   document.head.appendChild(styleElement);
 }
 
+// 添加恢复动画样式
+const restoreStyleElement = document.createElement('style');
+restoreStyleElement.textContent = `
+  @keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+`;
+if (!document.head.querySelector('style[data-restore]')) {
+  restoreStyleElement.setAttribute('data-restore', 'true');
+  document.head.appendChild(restoreStyleElement);
+}
+
 export default function MainCanvas() {
   const store = useMemo(() => createTLStore({ shapeUtils: [...defaultShapeUtils] }), []);
   const editorRef = useRef(null);
@@ -29,37 +43,146 @@ export default function MainCanvas() {
   const [dragOver, setDragOver] = useState(false);
   // 移除保存状态指示器，不再显示任何提示
   const [isAutoSaving, setIsAutoSaving] = useState(false);
+  // 刷新恢复状态
+  const [isRestoring, setIsRestoring] = useState(false);
+  
+  // 保存干净初始态快照
+  const pristineSnapshotRef = useRef(null);
+  const snapshotSavedRef = useRef(false);
+  
+  // 调试工具：暴露到全局，方便在控制台检查
+  useEffect(() => {
+    window.debugCanvas = {
+      checkSavedData: async () => {
+        const data = await storageManager.loadCanvas();
+        if (!data) {
+          console.log('没有保存的数据');
+          return null;
+        }
+        const dataString = JSON.stringify(data);
+        const info = await storageManager.getStorageInfo();
+        
+        console.log('保存的数据:', {
+          version: data.version,
+          timestamp: data.timestamp,
+          timestampDate: new Date(data.timestamp),
+          hasCanvasData: !!data.canvasData,
+          hasCamera: !!data.camera,
+          camera: data.camera,
+          currentPageId: data.currentPageId,
+          imageCount: data.imageInfo?.length || 0,
+          dataSize: (dataString.length / 1024 / 1024).toFixed(2) + ' MB',
+          storageMethod: info.currentMethod,
+          maxCapacity: info.maxSize
+        });
+        return data;
+      },
+      forceSave: async () => {
+        if (editorRef.current) {
+          console.log('强制保存当前状态...');
+          const canvasData = getSnapshot(editorRef.current.store);
+          const currentPageId = editorRef.current.getCurrentPageId();
+          const currentShapes = editorRef.current.getCurrentPageShapes();
+          const imageShapes = currentShapes.filter(shape => shape.type === 'image');
+          const camera = editorRef.current.getCamera();
+          const viewport = editorRef.current.getViewportPageBounds();
+          
+          const saveData = {
+            canvasData,
+            currentPageId,
+            imageInfo: imageShapes.map(shape => ({ shapeId: shape.id })),
+            camera,
+            viewport,
+            version: '1.0',
+            timestamp: Date.now(),
+            autoSave: true
+          };
+          
+          const result = await storageManager.saveCanvas(saveData);
+          if (result.success) {
+            console.log(`强制保存完成 (${result.method}, ${result.size}MB)，形状数量:`, currentShapes.length);
+          } else {
+            console.error('强制保存失败:', result.error);
+          }
+        }
+      },
+      clearSavedData: async () => {
+        await storageManager.clearCanvas();
+        console.log('已清除保存的数据');
+      },
+      getStorageInfo: async () => {
+        const info = await storageManager.getStorageInfo();
+        console.log('存储信息:', info);
+        return info;
+      }
+    };
+    
+    console.log('🔧 调试工具已加载。在控制台运行：');
+    console.log('  window.debugCanvas.checkSavedData() - 检查保存的数据');
+    console.log('  window.debugCanvas.forceSave() - 强制保存当前画布');
+    console.log('  window.debugCanvas.clearSavedData() - 清除保存的数据');
+    console.log('  window.debugCanvas.getStorageInfo() - 查看存储信息');
+  }, []);
 
-  // 新建画布功能
-  const handleNewCanvas = useCallback(() => {
-    if (!editorRef.current) return;
+  // 新建画布功能 - 使用快照恢复
+  const handleNewCanvas = useCallback(async () => {
+    if (!editorRef.current || !pristineSnapshotRef.current) return;
     
     if (confirm('确定要创建新画布吗？当前画布的内容将被清空。')) {
       try {
-        // 清空当前画布
-        const currentShapes = editorRef.current.getCurrentPageShapes();
-        if (currentShapes.length > 0) {
-          const shapeIds = currentShapes.map(shape => shape.id);
-          editorRef.current.deleteShapes(shapeIds);
-        }
+        console.log('开始快照恢复重置...');
+        
+        // 暂停自动保存监听（避免在重置过程写入垃圾快照）
+        setIsAutoSaving(false);
+        
+        // 加载干净初始态快照
+        const { loadSnapshot } = await import('tldraw');
+        loadSnapshot(store, pristineSnapshotRef.current);
         
         // 清除自动保存数据
-        localStorage.removeItem('autoSaveCanvas');
-        localStorage.removeItem('currentImageIds');
+        await storageManager.clearCanvas();
         
-        // 重置视图
-        editorRef.current.resetZoom();
-        editorRef.current.setCamera({ x: 0, y: 0, z: 1 });
+        // 恢复自动保存监听
+        setIsAutoSaving(true);
         
-        // 新画布创建完成
-        
-        console.log('新画布已创建');
+        console.log('快照恢复重置成功！');
       } catch (error) {
-        console.error('创建新画布失败:', error);
-        // 创建新画布失败
+        console.error('快照恢复重置失败:', error);
+        // 恢复自动保存监听
+        setIsAutoSaving(true);
       }
     }
-  }, []);
+  }, [store]);
+
+  // 重置画布功能 - 使用快照恢复
+  const handleResetCanvas = useCallback(async () => {
+    if (!editorRef.current || !pristineSnapshotRef.current) return;
+    
+    if (confirm('重置/关闭画布将清空所有内容，未保存的数据将丢失。确定继续吗？')) {
+      try {
+        console.log('开始快照恢复重置...');
+        
+        // 暂停自动保存监听（避免在重置过程写入垃圾快照）
+        setIsAutoSaving(false);
+        
+        // 加载干净初始态快照
+        const { loadSnapshot } = await import('tldraw');
+        loadSnapshot(store, pristineSnapshotRef.current);
+        
+        // 清除自动保存数据
+        await storageManager.clearCanvas();
+        
+        // 恢复自动保存监听
+        setIsAutoSaving(true);
+        
+        console.log('快照恢复重置成功！');
+      } catch (error) {
+        console.error('快照恢复重置失败:', error);
+        // 恢复自动保存监听
+        setIsAutoSaving(true);
+      }
+    }
+  }, [store]);
 
   // 关闭画布功能
   const handleCloseCanvas = useCallback(() => {
@@ -166,60 +289,90 @@ export default function MainCanvas() {
       const imageShapes = currentShapes.filter(shape => shape.type === 'image');
       const currentImageIds = imageShapes.map(shape => shape.id);
       
+      // 保存视图状态（缩放、位置等）
+      const viewport = editorRef.current.getViewportPageBounds();
+      const camera = editorRef.current.getCamera();
+      
       // 构建保存数据
       const saveData = {
         canvasData,
         currentPageId,
         imageInfo: currentImageIds.map(id => ({ shapeId: id })),
+        viewport: {
+          x: viewport.x,
+          y: viewport.y,
+          width: viewport.width,
+          height: viewport.height
+        },
+        camera: {
+          x: camera.x,
+          y: camera.y,
+          z: camera.z
+        },
         version: '1.0',
         timestamp: Date.now(),
         autoSave: true
       };
       
-      // 检查数据大小并尝试保存到localStorage
-      const dataString = JSON.stringify(saveData);
-      const dataSize = new Blob([dataString]).size;
-      const maxSize = 5 * 1024 * 1024; // 5MB限制
+      console.log('自动保存画布状态:', {
+        shapesCount: currentShapes.length,
+        imageCount: imageShapes.length,
+        camera: saveData.camera,
+        shapes: currentShapes.map(s => ({ id: s.id, type: s.type }))
+      });
       
-      if (dataSize > maxSize) {
-        console.warn(`自动保存数据过大 (${(dataSize / 1024 / 1024).toFixed(2)}MB)，跳过自动保存`);
-        return;
+      // 检查 canvasData 中的形状
+      if (canvasData && canvasData.store) {
+        const shapesInSnapshot = Object.keys(canvasData.store).filter(key => 
+          key.startsWith('shape:') && !key.includes('pointer')
+        );
+        console.log('快照中的形状数量:', shapesInSnapshot.length);
       }
       
-      try {
-        localStorage.setItem('autoSaveCanvas', dataString);
-        console.log('画布状态已自动保存');
-      } catch (storageError) {
-        if (storageError.name === 'QuotaExceededError') {
-          console.warn('localStorage空间不足，跳过自动保存');
-          // 尝试清理旧的自动保存数据
-          try {
-            localStorage.removeItem('autoSaveCanvas');
-            localStorage.setItem('autoSaveCanvas', dataString);
-            console.log('清理旧数据后自动保存成功');
-          } catch (retryError) {
-            console.warn('即使清理旧数据后仍无法保存，跳过自动保存');
+      // 使用智能存储管理器保存（支持 IndexedDB 大容量）
+      const result = await storageManager.saveCanvas(saveData);
+      
+      if (result.success) {
+        console.log(`✅ 画布状态已自动保存 (${result.method}, ${result.size}MB)`);
+      } else {
+        console.error(`❌ 自动保存失败: ${result.error}`);
+        // 延迟输出，确保错误可见
+        setTimeout(() => {
+          console.error('⚠️ 自动保存失败详情:', {
+            error: result.error,
+            size: result.size,
+            timestamp: new Date().toLocaleString()
+          });
+          if (parseFloat(result.size) > 10) {
+            console.warn('💡 提示：数据太大，请使用"保存画布"按钮手动保存为文件');
           }
-        } else {
-          throw storageError;
-        }
+        }, 100);
       }
     } catch (error) {
-      console.error('自动保存失败:', error);
+      console.error('❌ 自动保存异常:', error);
+      // 延迟输出，确保错误可见
+      setTimeout(() => {
+        console.error('⚠️ 自动保存发生严重错误:', {
+          message: error.message,
+          stack: error.stack,
+          timestamp: new Date().toLocaleString()
+        });
+      }, 100);
     } finally {
       setIsAutoSaving(false);
     }
   }, [isAutoSaving]);
 
-  // 从localStorage恢复画布状态
+  // 从存储恢复画布状态（支持 IndexedDB 和 localStorage）
   const restoreCanvasState = useCallback(async () => {
     if (!editorRef.current) return false;
     
     try {
-      const savedData = localStorage.getItem('autoSaveCanvas');
-      if (!savedData) return false;
-      
-      const saveData = JSON.parse(savedData);
+      const saveData = await storageManager.loadCanvas();
+      if (!saveData) {
+        console.log('没有找到保存的画布数据');
+        return false;
+      }
       
       // 检查数据有效性
       if (!saveData.canvasData || !saveData.version) {
@@ -239,14 +392,43 @@ export default function MainCanvas() {
       }
       
       console.log('开始恢复自动保存的画布状态...');
+      console.log('保存的数据结构:', {
+        hasCanvasData: !!saveData.canvasData,
+        hasCurrentPageId: !!saveData.currentPageId,
+        hasCamera: !!saveData.camera,
+        hasViewport: !!saveData.viewport,
+        timestamp: saveData.timestamp,
+        isRefresh: saveData.isRefresh
+      });
+      
+      // 详细检查 canvasData 中的形状数据
+      if (saveData.canvasData && saveData.canvasData.store) {
+        const shapesInData = Object.keys(saveData.canvasData.store).filter(key => 
+          key.startsWith('shape:') && !key.includes('pointer')
+        );
+        console.log('保存的数据中包含的形状数量:', shapesInData.length);
+        console.log('形状类型:', shapesInData.map(key => {
+          const shape = saveData.canvasData.store[key];
+          return shape.typeName === 'shape' ? shape.type : 'unknown';
+        }));
+      }
+      
+      setIsRestoring(true);
       
       const { loadSnapshot } = await import('tldraw');
       
       // 加载画布数据
+      console.log('正在加载快照数据到 store...');
       loadSnapshot(editorRef.current.store, saveData.canvasData);
+      console.log('快照数据加载完成');
       
       // 等待加载完成
       await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // 验证加载是否成功
+      const shapesAfterLoad = editorRef.current.getCurrentPageShapes();
+      console.log('加载后的形状数量:', shapesAfterLoad.length);
+      console.log('加载后的形状:', shapesAfterLoad.map(s => ({ id: s.id, type: s.type })));
       
       // 恢复页面状态
       if (saveData.currentPageId) {
@@ -267,6 +449,40 @@ export default function MainCanvas() {
         }
       }
       
+      // 恢复视图状态（缩放、位置等）
+      if (saveData.camera) {
+        try {
+          console.log('准备恢复相机状态:', saveData.camera);
+          setTimeout(() => {
+            try {
+              editorRef.current.setCamera(saveData.camera);
+              console.log('已恢复视图状态:', saveData.camera);
+              
+              // 验证相机状态是否真的恢复了
+              setTimeout(() => {
+                const currentCamera = editorRef.current.getCamera();
+                console.log('当前相机状态:', currentCamera);
+                console.log('相机状态恢复是否成功:', 
+                  Math.abs(currentCamera.x - saveData.camera.x) < 0.01 &&
+                  Math.abs(currentCamera.y - saveData.camera.y) < 0.01 &&
+                  Math.abs(currentCamera.z - saveData.camera.z) < 0.01
+                );
+              }, 100);
+            } catch (cameraError) {
+              console.error('设置相机状态失败:', cameraError);
+            }
+          }, 500); // 增加延迟，确保编辑器完全初始化
+        } catch (error) {
+          console.warn('恢复视图状态失败:', error);
+        }
+      }
+      
+      // 如果是刷新恢复，显示提示
+      if (saveData.isRefresh) {
+        console.log('检测到刷新恢复，工作内容已完全恢复');
+        // 可以在这里添加一个短暂的提示
+      }
+      
       // 更新localStorage中的图片ID列表
       if (saveData.imageInfo) {
         const currentImageIds = saveData.imageInfo.map(img => img.shapeId);
@@ -274,11 +490,22 @@ export default function MainCanvas() {
       }
       
       console.log('自动保存的画布状态恢复成功');
+      setIsRestoring(false);
       
       return true;
     } catch (error) {
-      console.error('恢复自动保存失败:', error);
+      console.error('❌ 恢复自动保存失败:', error);
+      // 延迟输出详细错误，确保可见
+      setTimeout(() => {
+        console.error('⚠️ 恢复画布状态时发生错误:', {
+          message: error.message,
+          stack: error.stack,
+          timestamp: new Date().toLocaleString()
+        });
+      }, 100);
       return false;
+    } finally {
+      setIsRestoring(false);
     }
   }, []);
 
@@ -289,11 +516,11 @@ export default function MainCanvas() {
     let saveTimeout;
     
     const unsubscribe = editorRef.current.store.listen(() => {
-      // 防抖：延迟2秒后保存，避免频繁保存
+      // 防抖：延迟5秒后保存，避免频繁保存
       clearTimeout(saveTimeout);
       saveTimeout = setTimeout(() => {
         saveCanvasState();
-      }, 2000);
+      }, 5000);
     }, { scope: "document" });
     
     return () => {
@@ -319,11 +546,14 @@ export default function MainCanvas() {
       
       // 延迟一下再恢复，确保编辑器完全初始化
       setTimeout(async () => {
+        console.log('开始检查自动保存数据...');
         const restored = await restoreCanvasState();
         if (!restored) {
           console.log('没有找到自动保存的数据或恢复失败');
+        } else {
+          console.log('自动保存数据恢复完成');
         }
-      }, 1000);
+      }, 1500); // 增加延迟时间，确保编辑器完全初始化
     };
     
     restoreAutoSave();
@@ -331,11 +561,12 @@ export default function MainCanvas() {
 
   // 页面卸载前保存状态
   useEffect(() => {
-    const handleBeforeUnload = () => {
-      if (editorRef.current && !isAutoSaving) {
-        // 同步保存，避免页面关闭时丢失数据
+    const handleBeforeUnload = (event) => {
+      if (editorRef.current) {
         try {
-          // 直接使用已导入的getSnapshot
+          console.log('页面即将关闭/刷新，立即保存画布状态...');
+          
+          // 强制同步保存，确保数据不丢失
           const canvasData = getSnapshot(editorRef.current.store);
           const currentPageId = editorRef.current.getCurrentPageId();
           
@@ -343,29 +574,70 @@ export default function MainCanvas() {
           const imageShapes = currentShapes.filter(shape => shape.type === 'image');
           const currentImageIds = imageShapes.map(shape => shape.id);
           
+          // 保存视图状态（缩放、位置等）
+          const viewport = editorRef.current.getViewportPageBounds();
+          const camera = editorRef.current.getCamera();
+          
+          console.log('保存时的状态:', {
+            shapesCount: currentShapes.length,
+            imageCount: imageShapes.length,
+            currentPageId,
+            camera,
+            viewport
+          });
+          
           const saveData = {
             canvasData,
             currentPageId,
             imageInfo: currentImageIds.map(id => ({ shapeId: id })),
+            viewport: {
+              x: viewport.x,
+              y: viewport.y,
+              width: viewport.width,
+              height: viewport.height
+            },
+            camera: {
+              x: camera.x,
+              y: camera.y,
+              z: camera.z
+            },
             version: '1.0',
             timestamp: Date.now(),
-            autoSave: true
+            autoSave: true,
+            isRefresh: true // 标记为刷新保存
           };
           
           localStorage.setItem('autoSaveCanvas', JSON.stringify(saveData));
-          console.log('页面关闭前已保存画布状态');
+          console.log('页面关闭前已保存画布状态（包含视图信息）');
+          
+          // 可选：显示确认对话框（仅在用户主动关闭时）
+          if (event.type === 'beforeunload') {
+            // 不显示确认对话框，直接保存
+            return;
+          }
         } catch (error) {
           console.error('页面关闭前保存失败:', error);
         }
       }
     };
     
+    // 监听多种页面关闭事件
     window.addEventListener('beforeunload', handleBeforeUnload);
+    window.addEventListener('unload', handleBeforeUnload);
+    
+    // 监听页面隐藏事件（移动端、切换标签页等）
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden && editorRef.current) {
+        handleBeforeUnload({ type: 'visibilitychange' });
+      }
+    });
     
     return () => {
       window.removeEventListener('beforeunload', handleBeforeUnload);
+      window.removeEventListener('unload', handleBeforeUnload);
+      document.removeEventListener('visibilitychange', handleBeforeUnload);
     };
-  }, [isAutoSaving]);
+  }, []);
 
   // 添加键盘快捷键支持
   useEffect(() => {
@@ -870,6 +1142,30 @@ export default function MainCanvas() {
         }}>
           正在重新初始化画布...
         </div>
+      ) : isRestoring ? (
+        <div style={{
+          width: "100%",
+          height: "100%",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          backgroundColor: "#f8f9fa",
+          fontSize: "16px",
+          color: "#28a745",
+          flexDirection: "column",
+          gap: "10px"
+        }}>
+          <div style={{
+            width: "40px",
+            height: "40px",
+            border: "3px solid #28a745",
+            borderTop: "3px solid transparent",
+            borderRadius: "50%",
+            animation: "spin 1s linear infinite"
+          }}></div>
+          <div>正在恢复您的工作内容...</div>
+          <div style={{ fontSize: "14px", color: "#6c757d" }}>请稍候，您的画布即将完全恢复</div>
+        </div>
       ) : (
         <Tldraw
           key={forceRerender} // 强制重新渲染
@@ -877,6 +1173,18 @@ export default function MainCanvas() {
           onMount={(editor) => {
           editorRef.current = editor;
           setEditorReady(true);
+          
+          // 保存干净初始态快照（只在首次mount时保存）
+          if (!snapshotSavedRef.current) {
+            try {
+              const snapshot = getSnapshot(store);
+              pristineSnapshotRef.current = snapshot;
+              snapshotSavedRef.current = true;
+              console.log('已保存干净初始态快照');
+            } catch (error) {
+              console.error('保存初始快照失败:', error);
+            }
+          }
           
           // 确保没有选中任何元素
           setTimeout(() => {
@@ -968,6 +1276,7 @@ export default function MainCanvas() {
             setIsLoading={setIsLoading}
             platform="TM"
             width={sidebarWidth}
+            onReset={handleResetCanvas}
           />
         </ResizableSidebar>
       )}

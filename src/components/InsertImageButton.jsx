@@ -2,6 +2,8 @@ import React, { useRef, useState } from "react";
 import { checkExistingAsset, saveImageInfo } from '../utils/assetUtils.js';
 import { placeAssetIntoSelectedFrame } from '../utils/assetUtils.js';
 import { syncImagesBySKU } from '../utils/skuUtils.js';
+import storageManager from '../utils/storageManager.js';
+import { getSnapshot } from 'tldraw';
 
 export default function InsertImageButton({ editor, selectedFrame }) {
   const fileInputRef = useRef(null);
@@ -281,14 +283,70 @@ export default function InsertImageButton({ editor, selectedFrame }) {
                   // SKU同步功能出错，静默处理
                 }
               }
+              
+              // 立即触发自动保存（避免用户快速刷新导致图片丢失）
+              setTimeout(async () => {
+                try {
+                  console.log('🖼️ 图片插入完成，触发自动保存...');
+                  const canvasData = getSnapshot(editor.store);
+                  const currentPageId = editor.getCurrentPageId();
+                  const currentShapes = editor.getCurrentPageShapes();
+                  const imageShapes = currentShapes.filter(shape => shape.type === 'image');
+                  const viewport = editor.getViewportPageBounds();
+                  const camera = editor.getCamera();
+                  
+                  const saveData = {
+                    canvasData,
+                    currentPageId,
+                    imageInfo: imageShapes.map(shape => ({ shapeId: shape.id })),
+                    viewport: {
+                      x: viewport.x,
+                      y: viewport.y,
+                      width: viewport.width,
+                      height: viewport.height
+                    },
+                    camera: {
+                      x: camera.x,
+                      y: camera.y,
+                      z: camera.z
+                    },
+                    version: '1.0',
+                    timestamp: Date.now(),
+                    autoSave: true,
+                    source: 'image-insert'
+                  };
+                  
+                  const result = await storageManager.saveCanvas(saveData);
+                  
+                  if (result.success) {
+                    console.log(`✅ 图片插入后自动保存成功 (${result.method}, ${result.size}MB)`);
+                  } else {
+                    console.error('❌ 图片插入后自动保存失败:', result.error);
+                    // 保持错误可见 5 秒
+                    setTimeout(() => {
+                      console.error('⚠️ 图片已插入但未能保存，刷新后将丢失！请手动保存画布。');
+                    }, 100);
+                  }
+                } catch (saveError) {
+                  console.error('❌ 图片插入后保存异常:', saveError);
+                  // 保持错误可见
+                  setTimeout(() => {
+                    console.error('⚠️ 严重错误：图片已插入但保存失败！', saveError);
+                  }, 100);
+                }
+              }, 500); // 等待 500ms 确保图片完全插入
             }
           } catch (shapeError) {
-            console.error('创建图片时发生错误:', shapeError);
+            console.error('❌ 创建图片时发生错误:', shapeError);
+            // 保持错误可见
+            setTimeout(() => {
+              console.error('⚠️ 图片创建失败，详细信息:', shapeError);
+            }, 100);
           }
         };
         
         img.onerror = (error) => {
-          // 图片加载失败，静默处理
+          console.error('❌ 图片加载失败:', error);
         };
         
         img.src = dataUrl;

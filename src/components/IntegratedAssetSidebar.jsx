@@ -6,7 +6,7 @@ import LoadCanvasButton from './LoadCanvasButton.jsx';
 import SaveCanvasButton from './SaveCanvasButton.jsx';
 import ShareCanvasButton from './ShareCanvasButton.jsx';
 
-export default function IntegratedAssetSidebar({ editor, selectedFrame, setIsLoading, platform = "TM", width }) {
+export default function IntegratedAssetSidebar({ editor, selectedFrame, setIsLoading, platform = "TM", width, onReset }) {
   const [usedAssetIds, setUsedAssetIds] = useState(new Set());
   const [assets, setAssets] = useState([]);
   const [forceUpdate, setForceUpdate] = useState(0);
@@ -192,37 +192,7 @@ export default function IntegratedAssetSidebar({ editor, selectedFrame, setIsLoa
           <SaveCanvasButton editor={editor} />
           <ShareCanvasButton editor={editor} />
           <button 
-            onClick={() => {
-              if (confirm('重置/关闭画布将清空所有内容，未保存的数据将丢失。确定继续吗？')) {
-                try {
-                  console.log('开始重置画布...');
-                  
-                  // 清空当前画布
-                  const currentShapes = editor.getCurrentPageShapes();
-                  console.log('当前形状数量:', currentShapes.length);
-                  
-                  if (currentShapes.length > 0) {
-                    const shapeIds = currentShapes.map(shape => shape.id);
-                    editor.deleteShapes(shapeIds);
-                    console.log('已删除形状:', shapeIds.length);
-                  }
-                  
-                  // 清除自动保存数据
-                  localStorage.removeItem('autoSaveCanvas');
-                  localStorage.removeItem('currentImageIds');
-                  console.log('已清除自动保存数据');
-                  
-                  // 重置视图
-                  editor.resetZoom();
-                  editor.setCamera({ x: 0, y: 0, z: 1 });
-                  console.log('已重置视图');
-                  
-                  console.log('画布重置成功！');
-                } catch (error) {
-                  console.error('重置画布失败:', error);
-                }
-              }
-            }}
+            onClick={onReset}
             style={{
               fontSize: 12,
               padding: "2px",
