@@ -241,7 +241,7 @@ export default function IntegratedAssetSidebar({ editor, selectedFrame, setIsLoa
             }}
             title="重置画布 (Ctrl+R)"
           >
-            <img src="/src/reset.png" alt="重置画布" style={{width: 32, height: 32}} />
+            <img src="/src/assets/reset.png" alt="重置画布" style={{width: 32, height: 32}} />
           </button>
         </div>
       </div>
