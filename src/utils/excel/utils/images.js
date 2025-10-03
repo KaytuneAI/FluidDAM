@@ -281,8 +281,9 @@ export async function extractImages(worksheet) {
             }
           }
           
-          // 压缩图片
-          const compressedBase64 = await compressImage(base64String, 100, mimeType);
+          // 使用96 DPI智能压缩
+          const { compressTo96DPI } = await import('../../dpiCompression.js');
+          const compressedBase64 = await compressTo96DPI(base64String, mimeType, 96);
           
           // 验证压缩后的图片
           const base64Part = imageUrl.split(';base64,')[1];

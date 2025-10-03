@@ -74,8 +74,19 @@ export default function InsertImageButton({ editor, selectedFrame }) {
       // 将文件转换为 data URL
       const reader = new FileReader();
       
-      reader.onload = (e) => {
-        const dataUrl = e.target.result;
+      reader.onload = async (e) => {
+        let dataUrl = e.target.result;
+        
+        // 应用96 DPI智能压缩
+        try {
+          const { compressTo96DPI } = await import('../utils/dpiCompression.js');
+          const mimeType = getMimeTypeFromFile(file);
+          const compressedBase64 = await compressTo96DPI(dataUrl.split(',')[1], mimeType, 96);
+          dataUrl = `data:${mimeType};base64,${compressedBase64}`;
+          console.log('✅ 图片已应用96 DPI智能压缩');
+        } catch (compressionError) {
+          console.warn('96 DPI压缩失败，使用原始图片:', compressionError);
+        }
         
         // 预加载图片，使用原始尺寸创建 asset/shape
         const img = new Image();

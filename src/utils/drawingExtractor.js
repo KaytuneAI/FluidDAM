@@ -412,8 +412,18 @@ export async function extractImages(worksheet) {
             mimeType = 'image/png'; // 默认类型
           }
           
+          // 应用96 DPI智能压缩
+          let compressedBase64 = base64String;
+          try {
+            const { compressTo96DPI } = await import('./dpiCompression.js');
+            compressedBase64 = await compressTo96DPI(base64String, mimeType, 96);
+            console.log('✅ 图片已应用96 DPI智能压缩');
+          } catch (compressionError) {
+            console.warn('96 DPI压缩失败，使用原始图片:', compressionError);
+          }
+          
           // 构建data URL
-          const dataUrl = `data:${mimeType};base64,${base64String}`;
+          const dataUrl = `data:${mimeType};base64,${compressedBase64}`;
           
           // 检查data URL是否有效
           if (!dataUrl || dataUrl.length === 0) {
