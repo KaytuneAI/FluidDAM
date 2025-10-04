@@ -130,7 +130,17 @@ export async function checkExistingImageByContent(editor, imageUrl) {
     const allImageAssets = getAllImageAssets(editor);
     console.log(`📊 当前画布共有 ${allImageAssets.length} 个图片资产`);
     
-    // 逐个比较
+    // 1. 快速URL匹配（同步，立即返回）
+    for (const { assetId, asset } of allImageAssets) {
+      if (asset?.props?.src === imageUrl) {
+        const normalizedAssetId = assetId.startsWith('asset:') ? assetId : `asset:${assetId}`;
+        console.log('⚡ 快速匹配成功:', normalizedAssetId);
+        return normalizedAssetId;
+      }
+    }
+    
+    // 2. 快速匹配失败，才做哈希检测
+    console.log('🔍 快速检查失败，开始哈希检测...');
     for (const { assetId, asset } of allImageAssets) {
       if (asset?.props?.src) {
         try {

@@ -229,6 +229,77 @@ export default function LoadCanvasButton({ editor, setIsLoading }) {
       }
     }
 
+    // 提取图片创建函数
+    async function createImageShape(editor, imageInfo, imageData) {
+      // 检查是否已存在相同的图片（跨页面检测）
+      const { checkExistingImageByContent } = await import('../utils/assetUtils.js');
+      let assetId = await checkExistingImageByContent(editor, imageData.url);
+      
+      if (!assetId) {
+        // 创建新的图片资产
+        assetId = `asset:${(globalThis.crypto?.randomUUID?.() || Math.random().toString(36).slice(2))}`;
+        
+        // 预加载图片获取真实尺寸
+        const img = new Image();
+        await new Promise((resolve, reject) => {
+          img.onload = resolve;
+          img.onerror = reject;
+          img.src = imageData.url;
+        });
+
+        const naturalW = img.naturalWidth || imageInfo.width;
+        const naturalH = img.naturalHeight || imageInfo.height;
+
+        // 创建资产
+        editor.createAssets([
+          {
+            id: assetId,
+            type: "image",
+            typeName: "asset",
+            meta: {},
+            props: {
+              w: naturalW,
+              h: naturalH,
+              src: imageData.url,
+              name: imageInfo.name,
+              mimeType: imageData.mimeType || 'image/png',
+              isAnimated: false
+            }
+          }
+        ]);
+        
+        console.log('🆕 创建新图片资产:', assetId);
+      } else {
+        console.log('♻️ 重用现有图片资产:', assetId);
+      }
+
+      // 创建图片形状 - 直接使用VBA提供的精确坐标
+      // 确保assetId有正确的前缀
+      const normalizedAssetId = assetId.startsWith('asset:') ? assetId : `asset:${assetId}`;
+      
+      const imageShape = {
+        type: 'image',
+        x: imageInfo.left,  // 直接使用VBA坐标
+        y: imageInfo.top,   // 直接使用VBA坐标
+        props: {
+          w: imageInfo.width,  // 使用VBA的精确宽度
+          h: imageInfo.height, // 使用VBA的精确高度
+          assetId: normalizedAssetId
+        }
+      };
+      
+      console.log('图片位置调试:', {
+        name: imageInfo.name,
+        vba坐标: { x: imageInfo.left, y: imageInfo.top },
+        提取坐标: { x: imageData.x, y: imageData.y },
+        最终使用: { x: imageInfo.left, y: imageInfo.top },
+        说明: '完全以VBA为准，不进行任何调整'
+      });
+      
+      editor.createShape(imageShape);
+      console.log('创建图片形状:', imageInfo.name, 'Z-order:', imageInfo.z);
+    }
+
     // 4. 按Z-order顺序创建所有元素
     console.log('开始按Z-order顺序创建所有元素...');
     
@@ -320,74 +391,36 @@ export default function LoadCanvasButton({ editor, setIsLoading }) {
             }
           }
           
-          if (imageData && imageData.url) {
-            // 检查是否已存在相同的图片（跨页面检测）
-            const { checkExistingImageByContent } = await import('../utils/assetUtils.js');
-            let assetId = await checkExistingImageByContent(editor, imageData.url);
+          // 检查是否启用懒加载
+          const enableLazyLoading = false; // 禁用懒加载，避免API错误
+          if (enableLazyLoading && imageData && imageData.url) {
+            // 使用懒加载
+            const { getLazyLoadingManager } = await import('../utils/lazyLoading.js');
+            const lazyManager = getLazyLoadingManager(editor);
             
-            if (!assetId) {
-              // 创建新的图片资产
-              assetId = `asset:${(globalThis.crypto?.randomUUID?.() || Math.random().toString(36).slice(2))}`;
-              
-              // 预加载图片获取真实尺寸
-              const img = new Image();
-              await new Promise((resolve, reject) => {
-                img.onload = resolve;
-                img.onerror = reject;
-                img.src = imageData.url;
-              });
-
-              const naturalW = img.naturalWidth || imageInfo.width;
-              const naturalH = img.naturalHeight || imageInfo.height;
-
-              // 创建资产
-              editor.createAssets([
-                {
-                  id: assetId,
-                  type: "image",
-                  typeName: "asset",
-                  meta: {},
-                  props: {
-                    w: naturalW,
-                    h: naturalH,
-                    src: imageData.url,
-                    name: imageInfo.name,
-                    mimeType: imageData.mimeType || 'image/png',
-                    isAnimated: false
-                  }
-                }
-              ]);
-              
-              console.log('🆕 创建新图片资产:', assetId);
-            } else {
-              console.log('♻️ 重用现有图片资产:', assetId);
-            }
-
-            // 创建图片形状 - 直接使用VBA提供的精确坐标
-            // 确保assetId有正确的前缀
-            const normalizedAssetId = assetId.startsWith('asset:') ? assetId : `asset:${assetId}`;
-            
-            const imageShape = {
-              type: 'image',
-              x: imageInfo.left,  // 直接使用VBA坐标
-              y: imageInfo.top,   // 直接使用VBA坐标
-              props: {
-                w: imageInfo.width,  // 使用VBA的精确宽度
-                h: imageInfo.height, // 使用VBA的精确高度
-                assetId: normalizedAssetId
-              }
-            };
-            
-            console.log('图片位置调试:', {
-              name: imageInfo.name,
-              vba坐标: { x: imageInfo.left, y: imageInfo.top },
-              提取坐标: { x: imageData.x, y: imageData.y },
-              最终使用: { x: imageInfo.left, y: imageInfo.top },
-              说明: '完全以VBA为准，不进行任何调整'
+            // 设置加载回调
+            lazyManager.setLoadCallback(async (imageId, imageData) => {
+              await createImageShape(editor, imageInfo, imageData);
             });
             
-            editor.createShape(imageShape);
-            console.log('创建图片形状:', imageInfo.name, 'Z-order:', imageInfo.z);
+            // 添加待加载图片
+            const imageId = `lazy_${imageInfo.name}_${Date.now()}`;
+            const imageDataWithPosition = {
+              ...imageData,
+              x: imageInfo.left,
+              y: imageInfo.top,
+              width: imageInfo.width,
+              height: imageInfo.height
+            };
+            
+            lazyManager.addPendingImage(imageId, imageDataWithPosition);
+            console.log('🔄 图片已加入懒加载队列:', imageInfo.name);
+            continue; // 跳过立即创建
+          }
+          
+          if (imageData && imageData.url) {
+            // 使用提取的图片创建函数
+            await createImageShape(editor, imageInfo, imageData);
           } else {
             // 创建占位符 - 直接使用VBA提供的精确坐标
             const placeholderShape = {
