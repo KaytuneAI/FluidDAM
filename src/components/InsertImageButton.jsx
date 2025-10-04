@@ -1,5 +1,5 @@
 import React, { useRef, useState } from "react";
-import { checkExistingAsset, saveImageInfo } from '../utils/assetUtils.js';
+import { checkExistingAssetByContent, saveImageInfo } from '../utils/assetUtils.js';
 import { placeAssetIntoSelectedFrame } from '../utils/assetUtils.js';
 import { syncImagesBySKU } from '../utils/skuUtils.js';
 import storageManager from '../utils/storageManager.js';
@@ -56,8 +56,8 @@ export default function InsertImageButton({ editor, selectedFrame }) {
     // 检查是否有选中的frame - 只使用用户明确选择的frame
     let targetFrame = selectedFrame;
 
-    // 先检查是否已存在相同的素材
-    const existingAssetId = await checkExistingAsset(editor, file);
+    // 先检查是否已存在相同的素材（基于内容哈希，跨页面检测）
+    const existingAssetId = await checkExistingAssetByContent(editor, file);
     if (existingAssetId) {
       // 直接使用现有的放置函数，与右侧素材栏按钮使用相同的方式
       placeAssetIntoSelectedFrame(editor, existingAssetId, "TM");

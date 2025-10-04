@@ -321,39 +321,52 @@ export default function LoadCanvasButton({ editor, setIsLoading }) {
           }
           
           if (imageData && imageData.url) {
-            // 创建图片资产
-            const assetId = `asset:${(globalThis.crypto?.randomUUID?.() || Math.random().toString(36).slice(2))}`;
+            // 检查是否已存在相同的图片（跨页面检测）
+            const { checkExistingImageByContent } = await import('../utils/assetUtils.js');
+            let assetId = await checkExistingImageByContent(editor, imageData.url);
             
-            // 预加载图片获取真实尺寸
-            const img = new Image();
-            await new Promise((resolve, reject) => {
-              img.onload = resolve;
-              img.onerror = reject;
-              img.src = imageData.url;
-            });
+            if (!assetId) {
+              // 创建新的图片资产
+              assetId = `asset:${(globalThis.crypto?.randomUUID?.() || Math.random().toString(36).slice(2))}`;
+              
+              // 预加载图片获取真实尺寸
+              const img = new Image();
+              await new Promise((resolve, reject) => {
+                img.onload = resolve;
+                img.onerror = reject;
+                img.src = imageData.url;
+              });
 
-            const naturalW = img.naturalWidth || imageInfo.width;
-            const naturalH = img.naturalHeight || imageInfo.height;
+              const naturalW = img.naturalWidth || imageInfo.width;
+              const naturalH = img.naturalHeight || imageInfo.height;
 
-            // 创建资产
-            editor.createAssets([
-              {
-                id: assetId,
-                type: "image",
-                typeName: "asset",
-                meta: {},
-                props: {
-                  w: naturalW,
-                  h: naturalH,
-                  src: imageData.url,
-                  name: imageInfo.name,
-                  mimeType: imageData.mimeType || 'image/png',
-                  isAnimated: false
+              // 创建资产
+              editor.createAssets([
+                {
+                  id: assetId,
+                  type: "image",
+                  typeName: "asset",
+                  meta: {},
+                  props: {
+                    w: naturalW,
+                    h: naturalH,
+                    src: imageData.url,
+                    name: imageInfo.name,
+                    mimeType: imageData.mimeType || 'image/png',
+                    isAnimated: false
+                  }
                 }
-              }
-            ]);
+              ]);
+              
+              console.log('🆕 创建新图片资产:', assetId);
+            } else {
+              console.log('♻️ 重用现有图片资产:', assetId);
+            }
 
             // 创建图片形状 - 直接使用VBA提供的精确坐标
+            // 确保assetId有正确的前缀
+            const normalizedAssetId = assetId.startsWith('asset:') ? assetId : `asset:${assetId}`;
+            
             const imageShape = {
               type: 'image',
               x: imageInfo.left,  // 直接使用VBA坐标
@@ -361,7 +374,7 @@ export default function LoadCanvasButton({ editor, setIsLoading }) {
               props: {
                 w: imageInfo.width,  // 使用VBA的精确宽度
                 h: imageInfo.height, // 使用VBA的精确高度
-                assetId: assetId
+                assetId: normalizedAssetId
               }
             };
             

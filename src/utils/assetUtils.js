@@ -1,7 +1,183 @@
 // 素材管理相关工具函数
 import { saveImageData } from './apiUtils.js';
 
-// 检查图片是否已存在于素材库中
+// 哈希比较策略接口
+class ImageHashStrategy {
+  async calculateHash(imageUrl) {
+    throw new Error('Must implement calculateHash method');
+  }
+  
+  async compare(imageUrl1, imageUrl2) {
+    const hash1 = await this.calculateHash(imageUrl1);
+    const hash2 = await this.calculateHash(imageUrl2);
+    return hash1 === hash2;
+  }
+}
+
+// SHA-256哈希策略
+class SHA256HashStrategy extends ImageHashStrategy {
+  async calculateHash(imageUrl) {
+    try {
+      const response = await fetch(imageUrl);
+      const arrayBuffer = await response.arrayBuffer();
+      const hashBuffer = await crypto.subtle.digest('SHA-256', arrayBuffer);
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    } catch (error) {
+      console.warn('SHA-256哈希计算失败:', error);
+      throw error;
+    }
+  }
+}
+
+// 简单哈希策略（基于URL和尺寸）
+class SimpleHashStrategy extends ImageHashStrategy {
+  async calculateHash(imageUrl) {
+    try {
+      const img = new Image();
+      await new Promise((resolve, reject) => {
+        img.onload = resolve;
+        img.onerror = reject;
+        img.src = imageUrl;
+      });
+      
+      return `${imageUrl}_${img.naturalWidth}_${img.naturalHeight}`;
+    } catch (error) {
+      console.warn('简单哈希计算失败:', error);
+      throw error;
+    }
+  }
+}
+
+// 哈希管理器
+class ImageHashManager {
+  constructor() {
+    this.strategies = [
+      new SHA256HashStrategy(),
+      new SimpleHashStrategy()
+    ];
+    this.currentStrategy = 0;
+  }
+  
+  async compareImages(imageUrl1, imageUrl2) {
+    // 快速检查URL是否相同
+    if (imageUrl1 === imageUrl2) {
+      return true;
+    }
+    
+    // 尝试当前策略
+    try {
+      const result = await this.strategies[this.currentStrategy].compare(imageUrl1, imageUrl2);
+      return result;
+    } catch (error) {
+      console.warn(`当前哈希策略失败: ${error.message}`);
+      
+      // 尝试下一个策略
+      for (let i = 1; i < this.strategies.length; i++) {
+        const nextIndex = (this.currentStrategy + i) % this.strategies.length;
+        try {
+          const result = await this.strategies[nextIndex].compare(imageUrl1, imageUrl2);
+          console.log(`切换到哈希策略: ${nextIndex}`);
+          this.currentStrategy = nextIndex;
+          return result;
+        } catch (nextError) {
+          console.warn(`策略 ${nextIndex} 也失败: ${nextError.message}`);
+        }
+      }
+      
+      // 所有策略都失败，返回false
+      console.error('所有哈希策略都失败，假设图片不同');
+      return false;
+    }
+  }
+  
+  // 手动切换策略
+  setStrategy(index) {
+    if (index >= 0 && index < this.strategies.length) {
+      this.currentStrategy = index;
+      console.log(`切换到哈希策略: ${index}`);
+    }
+  }
+}
+
+// 全局哈希管理器
+const hashManager = new ImageHashManager();
+
+// 获取当前画布的所有图片资产（跨页面）
+function getAllImageAssets(editor) {
+  const assets = editor.getAssets();
+  const imageAssets = [];
+  
+  for (const [key, asset] of Object.entries(assets)) {
+    if (asset?.type === 'image') {
+      // 使用资产对象本身的ID，而不是键
+      const actualAssetId = asset.id || key;
+      imageAssets.push({ assetId: actualAssetId, asset });
+    }
+  }
+  
+  return imageAssets;
+}
+
+// 检查图片是否已存在于画布中（基于内容哈希，跨页面检测）
+export async function checkExistingImageByContent(editor, imageUrl) {
+  if (!editor || !imageUrl) return null;
+  
+  try {
+    console.log('🔍 检查图片是否已存在:', imageUrl.substring(0, 50) + '...');
+    
+    // 获取所有图片资产（跨页面）
+    const allImageAssets = getAllImageAssets(editor);
+    console.log(`📊 当前画布共有 ${allImageAssets.length} 个图片资产`);
+    
+    // 逐个比较
+    for (const { assetId, asset } of allImageAssets) {
+      if (asset?.props?.src) {
+        try {
+          const isSame = await hashManager.compareImages(imageUrl, asset.props.src);
+          if (isSame) {
+            // 确保返回的assetId有正确的前缀
+            const normalizedAssetId = assetId.startsWith('asset:') ? assetId : `asset:${assetId}`;
+            console.log('🔄 发现重复图片，重用现有资产:', normalizedAssetId);
+            return normalizedAssetId;
+          }
+        } catch (error) {
+          console.warn('图片比较失败:', error);
+          // 继续检查下一个资产
+        }
+      }
+    }
+    
+    console.log('✅ 未发现重复图片，将创建新资产');
+    return null;
+  } catch (error) {
+    console.warn('检查重复图片失败:', error);
+    return null;
+  }
+}
+
+// 检查图片是否已存在于素材库中（基于内容哈希，跨页面检测）
+export async function checkExistingAssetByContent(editor, file) {
+  if (!editor) return null;
+  
+  try {
+    // 将文件转换为dataUrl
+    const dataUrl = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => resolve(e.target.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+    
+    // 使用内容哈希检测
+    return await checkExistingImageByContent(editor, dataUrl);
+  } catch (error) {
+    console.warn('检查重复素材失败:', error);
+    return null;
+  }
+}
+
+// 检查图片是否已存在于素材库中（旧方法，保持兼容性）
 export async function checkExistingAsset(editor, file) {
   if (!editor) return null;
   
