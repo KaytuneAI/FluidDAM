@@ -98,9 +98,9 @@ export function createFrameFromImageAnchor(drawing, rowOffsets, colOffsets, getC
  */
 export function placeImageIntoFrame(imageInfo, frameRect, padding = 0) {
   try {
-    // 项目级常量：内边距和描边
-    const CELL_PADDING = 8;
-    const FRAME_STROKE = 1;
+    // 项目级常量：内边距和描边（改为0以避免图片被裁剪）
+    const CELL_PADDING = 0;
+    const FRAME_STROKE = 0;
     const totalPadding = padding + CELL_PADDING + FRAME_STROKE;
     
     // 获取原始图片尺寸

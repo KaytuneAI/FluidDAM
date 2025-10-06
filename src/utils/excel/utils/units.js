@@ -18,6 +18,6 @@ export function pointsToPx(points) {
  */
 export function columnWidthToPx(width) {
   // Excel列宽近似换算公式（Calibri 11下较稳）
-  // 改进：使用更精确的换算，考虑不同字体和缩放
-  return Math.floor((width + 0.12) * 7);
+  // 改进：保留浮点数精度以避免累积误差导致图片裁剪
+  return (width + 0.12) * 7;
 }

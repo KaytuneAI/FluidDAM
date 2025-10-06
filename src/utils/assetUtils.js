@@ -124,23 +124,21 @@ export async function checkExistingImageByContent(editor, imageUrl) {
   if (!editor || !imageUrl) return null;
   
   try {
-    console.log('🔍 检查图片是否已存在:', imageUrl.substring(0, 50) + '...');
+      // 检查图片是否已存在
     
     // 获取所有图片资产（跨页面）
     const allImageAssets = getAllImageAssets(editor);
-    console.log(`📊 当前画布共有 ${allImageAssets.length} 个图片资产`);
+    // 获取当前画布图片资产数量
     
     // 1. 快速URL匹配（同步，立即返回）
     for (const { assetId, asset } of allImageAssets) {
       if (asset?.props?.src === imageUrl) {
         const normalizedAssetId = assetId.startsWith('asset:') ? assetId : `asset:${assetId}`;
-        console.log('⚡ 快速匹配成功:', normalizedAssetId);
         return normalizedAssetId;
       }
     }
     
     // 2. 快速匹配失败，才做哈希检测
-    console.log('🔍 快速检查失败，开始哈希检测...');
     for (const { assetId, asset } of allImageAssets) {
       if (asset?.props?.src) {
         try {
@@ -148,7 +146,7 @@ export async function checkExistingImageByContent(editor, imageUrl) {
           if (isSame) {
             // 确保返回的assetId有正确的前缀
             const normalizedAssetId = assetId.startsWith('asset:') ? assetId : `asset:${assetId}`;
-            console.log('🔄 发现重复图片，重用现有资产:', normalizedAssetId);
+            // 发现重复图片，重用现有资产
             return normalizedAssetId;
           }
         } catch (error) {
@@ -158,7 +156,7 @@ export async function checkExistingImageByContent(editor, imageUrl) {
       }
     }
     
-    console.log('✅ 未发现重复图片，将创建新资产');
+    // 未发现重复图片，将创建新资产
     return null;
   } catch (error) {
     console.warn('检查重复图片失败:', error);

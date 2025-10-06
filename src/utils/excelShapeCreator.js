@@ -227,9 +227,9 @@ export class ExcelShapeCreator {
    */
   fitImageToFrame(imageInfo, frameRect, padding = 0) {
     try {
-      // 项目级常量：内边距和描边
-      const CELL_PADDING = 8;
-      const FRAME_STROKE = 1;
+      // 项目级常量：内边距和描边（改为0以避免图片被裁剪）
+      const CELL_PADDING = 0;
+      const FRAME_STROKE = 0;
       const totalPadding = padding + CELL_PADDING + FRAME_STROKE;
       
       // 获取原始图片尺寸
@@ -338,8 +338,9 @@ export class ExcelShapeCreator {
               const drawW = element.width * this.scale;
               const drawH = element.height * this.scale;
               
-              // 确保尺寸不为0（TLDraw v3要求）
-              const finalW = Math.max(1, drawW);
+              // 尝试添加一些补偿来避免裁剪
+              const compensation = 2; // 左右各补偿2像素
+              const finalW = Math.max(1, drawW + compensation * 2);
               const finalH = Math.max(1, drawH);
               
               if (isNaN(drawX) || isNaN(drawY) || isNaN(finalW) || isNaN(finalH) || finalW <= 0 || finalH <= 0) {
@@ -354,13 +355,7 @@ export class ExcelShapeCreator {
                 continue;
               }
               
-              // 详细记录最终图片尺寸
-              console.log(`🎨 最终图片形状信息:`);
-              console.log(`   Excel原始尺寸: ${naturalW}x${naturalH}px`);
-              console.log(`   画布最终尺寸: ${finalW}x${finalH}px`);
-              console.log(`   位置坐标: (${drawX}, ${drawY})`);
-              console.log(`   最终缩放: ${(finalW/naturalW).toFixed(3)}x (宽) / ${(finalH/naturalH).toFixed(3)}x (高)`);
-              console.log(`   父frame: ${parentId}`);
+              // 图片形状创建完成
               
               // 3) 创建图片shape，使用正确的props.w/h尺寸
               shape = {

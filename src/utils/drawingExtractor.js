@@ -242,18 +242,18 @@ export async function extractImages(worksheet) {
         
         // 尝试从workbook获取图片
         if (imageData.imageId !== undefined && imageData.imageId !== null) {
-          console.log(`尝试通过imageId获取图片: ${imageData.imageId}`);
+          // 尝试通过imageId获取图片
           
           // 尝试从workbook获取图片
           const workbook = worksheet._workbook;
           if (workbook) {
-            console.log('尝试从workbook获取图片...');
+            // 尝试从workbook获取图片
             
             // 尝试不同的方法获取图片
             if (typeof workbook.getImage === 'function') {
               try {
                 imageData = await workbook.getImage(imageData.imageId);
-                console.log('通过workbook.getImage()获取图片数据成功');
+                // 通过workbook.getImage()获取图片数据成功
               } catch (error) {
                 console.warn('workbook.getImage()失败:', error);
               }
@@ -261,21 +261,21 @@ export async function extractImages(worksheet) {
             
             // 尝试从workbook.images获取
             if (!imageData && workbook.images) {
-              console.log('尝试从workbook.images获取图片...');
+              // 尝试从workbook.images获取图片
               const workbookImage = workbook.images.find(img => img.id === imageData.imageId);
               if (workbookImage) {
                 imageData = workbookImage;
-                console.log('从workbook.images找到图片');
+                // 从workbook.images找到图片
               }
             }
             
             // 尝试从workbook._media获取
             if (!imageData && workbook._media) {
-              console.log('尝试从workbook._media获取图片...');
+              // 尝试从workbook._media获取图片
               const mediaImage = workbook._media.find(media => media.id === imageData.imageId);
               if (mediaImage) {
                 imageData = mediaImage;
-                console.log('从workbook._media找到图片');
+                // 从workbook._media找到图片
               }
             }
           }
@@ -288,18 +288,18 @@ export async function extractImages(worksheet) {
           // 尝试获取图片buffer
           if (imageData.buffer) {
             buffer = imageData.buffer;
-            console.log('从imageData.buffer获取图片数据');
+            // 从imageData.buffer获取图片数据
           } else if (imageData.image && imageData.image.buffer) {
             buffer = imageData.image.buffer;
-            console.log('从imageData.image.buffer获取图片数据');
+            // 从imageData.image.buffer获取图片数据
           } else if (imageData.data) {
             buffer = imageData.data;
-            console.log('从imageData.data获取图片数据');
+            // 从imageData.data获取图片数据
           } else {
             // 尝试从嵌套对象中查找buffer
             // console.log('尝试从嵌套对象中查找buffer...');
             const allKeys = Object.keys(imageData);
-            console.log('imageData的所有键:', allKeys);
+            // 检查imageData的所有键
             
             for (const key of allKeys) {
               const value = imageData[key];
@@ -417,7 +417,7 @@ export async function extractImages(worksheet) {
           try {
             const { compressTo96DPI } = await import('./dpiCompression.js');
             compressedBase64 = await compressTo96DPI(base64String, mimeType, 96);
-            console.log('✅ 图片已应用96 DPI智能压缩');
+            // 图片已应用96 DPI智能压缩
           } catch (compressionError) {
             console.warn('96 DPI压缩失败，使用原始图片:', compressionError);
           }

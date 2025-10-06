@@ -155,11 +155,11 @@ export default function LoadCanvasButton({ editor, setIsLoading }) {
 
   // 处理布局数据的函数
   const processLayoutData = async (layoutData, file) => {
-    console.log('开始处理布局数据...');
+    // 开始处理布局数据
     
     // 1. 设置画布尺寸（如果需要）
     if (layoutData.sheet && layoutData.sheet.sizePx) {
-      console.log('画布尺寸:', layoutData.sheet.sizePx);
+      // 画布尺寸已设置
     }
     
     // 2. 创建所有元素的统一列表并按Z-order排序
@@ -268,40 +268,37 @@ export default function LoadCanvasButton({ editor, setIsLoading }) {
           }
         ]);
         
-        console.log('🆕 创建新图片资产:', assetId);
+        // 创建新图片资产
       } else {
-        console.log('♻️ 重用现有图片资产:', assetId);
+        // 重用现有图片资产
       }
 
       // 创建图片形状 - 直接使用VBA提供的精确坐标
       // 确保assetId有正确的前缀
       const normalizedAssetId = assetId.startsWith('asset:') ? assetId : `asset:${assetId}`;
       
+      // 尝试添加补偿来避免裁剪
+      const compensation = 12; // 左右各补偿12像素，确保完全没有裁剪
+      const adjustedWidth = imageInfo.width + compensation * 2;
+      
       const imageShape = {
         type: 'image',
         x: imageInfo.left,  // 直接使用VBA坐标
         y: imageInfo.top,   // 直接使用VBA坐标
         props: {
-          w: imageInfo.width,  // 使用VBA的精确宽度
+          w: adjustedWidth,  // 使用调整后的宽度
           h: imageInfo.height, // 使用VBA的精确高度
           assetId: normalizedAssetId
         }
       };
       
-      console.log('图片位置调试:', {
-        name: imageInfo.name,
-        vba坐标: { x: imageInfo.left, y: imageInfo.top },
-        提取坐标: { x: imageData.x, y: imageData.y },
-        最终使用: { x: imageInfo.left, y: imageInfo.top },
-        说明: '完全以VBA为准，不进行任何调整'
-      });
+      // 图片宽度补偿已应用，确保无裁剪
       
       editor.createShape(imageShape);
-      console.log('创建图片形状:', imageInfo.name, 'Z-order:', imageInfo.z);
+      // 图片形状创建完成
     }
 
     // 4. 按Z-order顺序创建所有元素
-    console.log('开始按Z-order顺序创建所有元素...');
     
     for (const element of sortedElements) {
       try {
@@ -336,7 +333,7 @@ export default function LoadCanvasButton({ editor, setIsLoading }) {
             };
             
             editor.createShape(backgroundShape);
-            console.log('创建文本框背景:', textbox.name, '边框:', hasBorder, '填充:', hasFill);
+            // 文本框背景创建完成
           }
           
           // 创建文字内容
@@ -359,18 +356,8 @@ export default function LoadCanvasButton({ editor, setIsLoading }) {
           };
           
           // 添加调试信息
-          console.log('=== 文本框文字调试 ===');
-          console.log('名称:', textbox.name);
-          console.log('文本长度:', textbox.text.length);
-          console.log('文本框尺寸:', { width: textbox.width, height: textbox.height });
-          console.log('文字宽度:', textWidth);
-          console.log('内边距:', padding);
-          console.log('文本前50字符:', textbox.text.substring(0, 50));
-          console.log('========================');
-          
           editor.createShape(textShape);
-          console.log('创建文本框:', textbox.name, 'Z-order:', textbox.z, 
-            'VBA坐标:', { x: textbox.left, y: textbox.top, w: textbox.width });
+          // 文本框创建完成
           
         } else if (element.type === 'image') {
           // 创建图片
@@ -438,7 +425,7 @@ export default function LoadCanvasButton({ editor, setIsLoading }) {
             };
             
             editor.createShape(placeholderShape);
-            console.log('创建图片占位符:', imageInfo.name, 'Z-order:', imageInfo.z);
+            // 图片占位符创建完成
           }
         }
       } catch (error) {
@@ -495,7 +482,7 @@ export default function LoadCanvasButton({ editor, setIsLoading }) {
             editor.createShape(textShape);
           }
           
-          console.log('创建单元格:', cell.r, cell.c, '原始数据:', {x: cell.x, y: cell.y, w: cell.w, h: cell.h}, '验证后:', {x, y, w, h});
+          // 单元格创建完成
         } catch (error) {
           console.warn('创建单元格失败:', cell, error);
         }
