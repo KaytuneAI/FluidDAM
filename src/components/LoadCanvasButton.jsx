@@ -38,24 +38,33 @@ export default function LoadCanvasButton({ editor, setIsLoading }) {
         throw new Error('未找到LayoutJson sheet');
       }
       
-      // 3. 检查是否分割的JSON（通过C1单元格判断）
-      const totalChunksCell = layoutSheet.getCell('C1').value;
+      // 3. 检查是否分割的JSON（横向扩展模式）
       let jsonContent = '';
       
-      if (totalChunksCell && totalChunksCell.toString().includes('TotalChunks:')) {
-        // 分割的JSON，需要重新组合
-        const totalChunks = parseInt(totalChunksCell.toString().replace('TotalChunks: ', ''));
-        console.log('检测到分割的JSON，总块数:', totalChunks);
-        
-        for (let i = 1; i <= totalChunks; i++) {
-          const chunk = layoutSheet.getCell(`A${i}`).value;
-          if (chunk) {
+      // 先尝试从A1读取单个JSON
+      const singleJson = layoutSheet.getCell('A1').value;
+      if (singleJson && singleJson.length > 0) {
+        // 检查B1是否有内容，如果有则说明是横向分割的JSON
+        const secondChunk = layoutSheet.getCell('B1').value;
+        if (secondChunk && secondChunk.length > 0) {
+          // 横向分割的JSON，需要重新组合
+          console.log('检测到横向分割的JSON');
+          
+          // 横向读取：A1, B1, C1, D1...
+          let columnIndex = 1;
+          let chunk = layoutSheet.getCell(1, columnIndex).value;
+          
+          while (chunk && chunk.length > 0) {
             jsonContent += chunk;
+            columnIndex++;
+            chunk = layoutSheet.getCell(1, columnIndex).value;
           }
+          
+          console.log(`横向分割的JSON，总列数: ${columnIndex - 1}`);
+        } else {
+          // 单个JSON，直接从A1读取
+          jsonContent = singleJson;
         }
-      } else {
-        // 单个JSON，直接从A1读取
-        jsonContent = layoutSheet.getCell('A1').value || '';
       }
       
       console.log('读取到JSON内容长度:', jsonContent.length);

@@ -1,4 +1,42 @@
 ﻿Option Explicit
+Public gRibbon As IRibbonUI
+
+Public Sub OnRibbonLoad(ByVal ribbon As IRibbonUI)
+    Set gRibbon = ribbon
+End Sub
+
+Public Sub ExportLayoutWin_OnAction(control As IRibbonControl)
+    ExportLayoutWin
+End Sub
+
+Public Sub ListAllPictures_OnAction(control As IRibbonControl)
+    ListAllPictures
+End Sub
+
+Public Sub ListAllBorders_OnAction(control As IRibbonControl)
+    ListAllBorders
+End Sub
+
+Public Sub RefreshCache_OnAction(control As IRibbonControl)
+End Sub
+
+Public Sub OpenDocs_OnAction(control As IRibbonControl)
+    Dim p As String
+    p = ThisWorkbook.Path & Application.PathSeparator & "README_Pro.txt"
+    If Len(Dir$(p)) > 0 Then
+        Shell "notepad.exe " & Chr$(34) & p & Chr$(34), vbNormalFocus
+    Else
+        MsgBox "README_Pro.txt 未找到。", vbInformation
+    End If
+End Sub
+
+Public Sub About_OnAction(control As IRibbonControl)
+    MsgBox "FluidDAM for Excel" & vbCrLf & _
+           "Pro (Safe UI)" & vbCrLf & "? 2025 Kaytune", vbInformation, "关于"
+End Sub
+
+
+
 
 ' ================= ENTRY POINT =================
 Public Sub ExportLayoutWin()
@@ -55,14 +93,9 @@ Private Sub SplitJsonToCells(ByVal ws As Worksheet, ByVal json As String)
         Dim endPos As Long: endPos = IIf(i * chunkSize > totalLen, totalLen, i * chunkSize)
         
         Dim chunk As String: chunk = Mid(json, startPos, endPos - startPos + 1)
-        ws.Cells(i, 1).Value2 = chunk
-        
-        ' 在B列标记这是第几块
-        ws.Cells(i, 2).Value2 = "Part " & i & " of " & chunkCount
+        ' 横向扩展：第1块放在A1，第2块放在B1，第3块放在C1...
+        ws.Cells(1, i).Value2 = chunk
     Next i
-    
-    ' 在C1标记总块数
-    ws.Cells(1, 3).Value2 = "TotalChunks: " & chunkCount
 End Sub
 
 ' ================= 调试函数 =================
@@ -107,7 +140,7 @@ Public Sub ListAllBorders()
     Debug.Print "=== All Border Information in Current Worksheet ==="
     Debug.Print "UsedRange: " & ur.Address
     
-    For r = ur.Row To ur.Row + ur.Rows.Count - 1
+    For r = ur.row To ur.row + ur.Rows.Count - 1
         For c = ur.Column To ur.Column + ur.Columns.Count - 1
             Dim cell As Range
             Set cell = ws.Cells(r, c)
@@ -116,8 +149,8 @@ Public Sub ListAllBorders()
             ' 测试前几个单元格的详细信息
             If totalChecked <= 10 Then
                 Debug.Print "Testing cell " & cell.Address & ":"
-                Debug.Print "  DisplayFormat.Top: " & cell.DisplayFormat.Borders(xlEdgeTop).LineStyle
-                Debug.Print "  Regular.Top: " & cell.Borders(xlEdgeTop).LineStyle
+                Debug.Print "  DisplayFormat.Top: " & cell.DisplayFormat.Borders(xlEdgeTop).lineStyle
+                Debug.Print "  Regular.Top: " & cell.Borders(xlEdgeTop).lineStyle
                 Debug.Print "  xlLineStyleNone = " & xlLineStyleNone
             End If
             
@@ -126,11 +159,11 @@ Public Sub ListAllBorders()
                 Debug.Print borderCount & ". Cell: " & cell.Address & " | Row: " & r & " | Col: " & c
                 
                 ' Check each border using DisplayFormat first
-                If cell.DisplayFormat.Borders(xlEdgeTop).LineStyle <> xlLineStyleNone Then
-                    Debug.Print "   Top Border (Display): " & GetBorderStyleName(cell.DisplayFormat.Borders(xlEdgeTop).LineStyle) & _
+                If cell.DisplayFormat.Borders(xlEdgeTop).lineStyle <> xlLineStyleNone Then
+                    Debug.Print "   Top Border (Display): " & GetBorderStyleName(cell.DisplayFormat.Borders(xlEdgeTop).lineStyle) & _
                                " | Color: " & RGBToHex(cell.DisplayFormat.Borders(xlEdgeTop).Color)
-                ElseIf cell.Borders(xlEdgeTop).LineStyle <> xlLineStyleNone Then
-                    Debug.Print "   Top Border (Regular): " & GetBorderStyleName(cell.Borders(xlEdgeTop).LineStyle) & _
+                ElseIf cell.Borders(xlEdgeTop).lineStyle <> xlLineStyleNone Then
+                    Debug.Print "   Top Border (Regular): " & GetBorderStyleName(cell.Borders(xlEdgeTop).lineStyle) & _
                                " | Color: " & RGBToHex(cell.Borders(xlEdgeTop).Color)
                 End If
                 
@@ -208,7 +241,7 @@ Private Function CellsToJsonSparse(ByVal ws As Worksheet, ByRef nonEmptyCount As
                 If nonEmptyCount > 0 Then sb = sb & ","
                 
                 ' 构建单元格信息，包括位置和尺寸
-                sb = sb & "{""r"":" & CNum(ur.Row + r - 1) & _
+                sb = sb & "{""r"":" & CNum(ur.row + r - 1) & _
                           ",""c"":" & CNum(ur.Column + c - 1) & _
                           ",""x"":" & CNumD(cell.Left * pt2px) & _
                           ",""y"":" & CNumD(cell.Top * pt2px) & _
@@ -470,7 +503,7 @@ End Function
 ' Safely get shape text content
 Private Function GetShapeText(shp As Shape) As String
     On Error Resume Next
-    GetShapeText = shp.TextFrame2.TextRange.text
+    GetShapeText = shp.TextFrame2.TextRange.Text
     On Error GoTo 0
     If Err.Number <> 0 Then
         GetShapeText = ""
@@ -677,7 +710,7 @@ Private Function BordersToJson(ByVal ws As Worksheet, ByVal pt2px As Double, ByR
     
     On Error GoTo EMPTY_RANGE
     
-    ' —— 先取 UsedRange —— 
+    ' —— 先取 UsedRange ——
     Dim ur As Range
     Set ur = ws.UsedRange
     If ur Is Nothing Then GoTo EMPTY_RANGE
@@ -690,7 +723,7 @@ Private Function BordersToJson(ByVal ws As Worksheet, ByVal pt2px As Double, ByR
     Dim r As Long, c As Long, checkedCount As Long
     checkedCount = 0
     
-    For r = ur.Row To ur.Row + ur.Rows.Count - 1
+    For r = ur.row To ur.row + ur.Rows.Count - 1
         For c = ur.Column To ur.Column + ur.Columns.Count - 1
             Dim cell As Range
             Set cell = ws.Cells(r, c)
@@ -759,17 +792,17 @@ Private Function HasCellBorder(ByVal cell As Range) As Boolean
     ' 先尝试使用 DisplayFormat（包括条件格式）
     Dim hasTop As Boolean, hasBottom As Boolean, hasLeft As Boolean, hasRight As Boolean
     
-    hasTop = (cell.DisplayFormat.Borders(xlEdgeTop).LineStyle <> xlLineStyleNone)
-    hasBottom = (cell.DisplayFormat.Borders(xlEdgeBottom).LineStyle <> xlLineStyleNone)
-    hasLeft = (cell.DisplayFormat.Borders(xlEdgeLeft).LineStyle <> xlLineStyleNone)
-    hasRight = (cell.DisplayFormat.Borders(xlEdgeRight).LineStyle <> xlLineStyleNone)
+    hasTop = (cell.DisplayFormat.Borders(xlEdgeTop).lineStyle <> xlLineStyleNone)
+    hasBottom = (cell.DisplayFormat.Borders(xlEdgeBottom).lineStyle <> xlLineStyleNone)
+    hasLeft = (cell.DisplayFormat.Borders(xlEdgeLeft).lineStyle <> xlLineStyleNone)
+    hasRight = (cell.DisplayFormat.Borders(xlEdgeRight).lineStyle <> xlLineStyleNone)
     
     ' 如果DisplayFormat没有找到边框，尝试使用普通的Borders
     If Not (hasTop Or hasBottom Or hasLeft Or hasRight) Then
-        hasTop = (cell.Borders(xlEdgeTop).LineStyle <> xlLineStyleNone)
-        hasBottom = (cell.Borders(xlEdgeBottom).LineStyle <> xlLineStyleNone)
-        hasLeft = (cell.Borders(xlEdgeLeft).LineStyle <> xlLineStyleNone)
-        hasRight = (cell.Borders(xlEdgeRight).LineStyle <> xlLineStyleNone)
+        hasTop = (cell.Borders(xlEdgeTop).lineStyle <> xlLineStyleNone)
+        hasBottom = (cell.Borders(xlEdgeBottom).lineStyle <> xlLineStyleNone)
+        hasLeft = (cell.Borders(xlEdgeLeft).lineStyle <> xlLineStyleNone)
+        hasRight = (cell.Borders(xlEdgeRight).lineStyle <> xlLineStyleNone)
     End If
     
     HasCellBorder = hasTop Or hasBottom Or hasLeft Or hasRight
@@ -788,8 +821,8 @@ Private Function BuildBorderJson(ByVal cell As Range, ByVal row As Long, ByVal c
     sb = sb & Q("col") & ":" & CNum(col) & ","
     sb = sb & Q("x") & ":" & CNumD(bounds.x) & ","
     sb = sb & Q("y") & ":" & CNumD(bounds.y) & ","
-    sb = sb & Q("width") & ":" & CNumD(bounds.width) & ","
-    sb = sb & Q("height") & ":" & CNumD(bounds.height) & ","
+    sb = sb & Q("width") & ":" & CNumD(bounds.Width) & ","
+    sb = sb & Q("height") & ":" & CNumD(bounds.Height) & ","
     sb = sb & Q("borders") & ":{"
     sb = sb & BuildBorderSides(cell)
     sb = sb & "}"
@@ -817,25 +850,25 @@ Private Function BuildBorderSides(ByVal cell As Range) As String
     Dim first As Boolean: first = True
     
     ' Check top border
-    If cell.DisplayFormat.Borders(xlEdgeTop).LineStyle <> xlLineStyleNone Then
+    If cell.DisplayFormat.Borders(xlEdgeTop).lineStyle <> xlLineStyleNone Then
         If Not first Then sb = sb & "," Else first = False
         sb = sb & Q("top") & ":" & BuildBorderSide(cell.DisplayFormat.Borders(xlEdgeTop))
     End If
     
     ' Check bottom border
-    If cell.DisplayFormat.Borders(xlEdgeBottom).LineStyle <> xlLineStyleNone Then
+    If cell.DisplayFormat.Borders(xlEdgeBottom).lineStyle <> xlLineStyleNone Then
         If Not first Then sb = sb & "," Else first = False
         sb = sb & Q("bottom") & ":" & BuildBorderSide(cell.DisplayFormat.Borders(xlEdgeBottom))
     End If
     
     ' Check left border
-    If cell.DisplayFormat.Borders(xlEdgeLeft).LineStyle <> xlLineStyleNone Then
+    If cell.DisplayFormat.Borders(xlEdgeLeft).lineStyle <> xlLineStyleNone Then
         If Not first Then sb = sb & "," Else first = False
         sb = sb & Q("left") & ":" & BuildBorderSide(cell.DisplayFormat.Borders(xlEdgeLeft))
     End If
     
     ' Check right border
-    If cell.DisplayFormat.Borders(xlEdgeRight).LineStyle <> xlLineStyleNone Then
+    If cell.DisplayFormat.Borders(xlEdgeRight).lineStyle <> xlLineStyleNone Then
         If Not first Then sb = sb & "," Else first = False
         sb = sb & Q("right") & ":" & BuildBorderSide(cell.DisplayFormat.Borders(xlEdgeRight))
     End If
@@ -844,10 +877,10 @@ Private Function BuildBorderSides(ByVal cell As Range) As String
 End Function
 
 ' Build information for a single border side
-Private Function BuildBorderSide(ByVal border As Border) As String
+Private Function BuildBorderSide(ByVal border As border) As String
     Dim sb As String
     sb = "{"
-    sb = sb & Q("style") & ":" & Q(GetBorderStyleName(border.LineStyle)) & ","
+    sb = sb & Q("style") & ":" & Q(GetBorderStyleName(border.lineStyle)) & ","
     sb = sb & Q("color") & ":" & Q(RGBToHex(border.Color)) & ","
     sb = sb & Q("weight") & ":" & CNum(border.Weight)
     sb = sb & "}"
@@ -869,4 +902,6 @@ Private Function GetBorderStyleName(ByVal lineStyle As Long) As String
         Case Else: GetBorderStyleName = "solid"
     End Select
 End Function
+
+
 
