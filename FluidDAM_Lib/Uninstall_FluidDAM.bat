@@ -37,7 +37,7 @@ set "USR_ADDINS=%AppData%\Microsoft\AddIns"
 
 for %%D in ("%USR_XLSTART%" "%CMN_XLSTART%" "%CMN_XLSTART_X86%" "%USR_ADDINS%") do (
   if exist "%%~D" (
-    for %%F in ("LayoutExporter_New.xlam" "LayoutExporter_Pro.xlam" "LayoutExporter.xlam" "FluidDAM.xlam") do (
+    for %%F in ("LayoutExporter_New.xlam" "LayoutExporter_Pro.xlam" "LayoutExporter.xlam" ) do (
       if exist "%%~D\%%~F" (
         echo Removing "%%~D\%%~F"
         del /f /q "%%~D\%%~F" >nul 2>&1
@@ -97,7 +97,7 @@ echo FluidDAM cleanup finished.
 if "%DOLOG%"=="1" (
   echo A log was written to: %LOGFILE%
 ) else (
-  echo (Run with -log to capture details: Uninstall_FluidDAM_Quiet.bat -log)
+  echo (Run with -log to capture details: Uninstall_FluidDAM.bat -log)
 )
 echo.
 pause

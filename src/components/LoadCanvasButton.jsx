@@ -364,17 +364,29 @@ export default function LoadCanvasButton({ editor, setIsLoading }) {
       // 确保assetId有正确的前缀
       const normalizedAssetId = assetId.startsWith('asset:') ? assetId : `asset:${assetId}`;
       
-      // 尝试添加补偿来避免裁剪
-      const compensation = 12; // 左右各补偿12像素，确保完全没有裁剪
-      const adjustedWidth = imageInfo.width + compensation * 2;
+      // 补偿策略：扩大Shape并调整位置
+      const horizontalCompensation = 12; // 左右各补偿12像素
+      const verticalCompensation = 8;   // 上下各补偿8像素
+      
+      const adjustedWidth = imageInfo.width + horizontalCompensation * 2;
+      const adjustedHeight = imageInfo.height + verticalCompensation * 2;
+      
+      // 调整位置使图片视觉中心与Excel对齐
+      const adjustedX = imageInfo.left - horizontalCompensation;
+      const adjustedY = imageInfo.top - verticalCompensation;
+      
+      console.log(`📐 VBA图片补偿:`);
+      console.log(`   Excel位置/尺寸: (${imageInfo.left}, ${imageInfo.top}) ${imageInfo.width}×${imageInfo.height}`);
+      console.log(`   补偿后位置/尺寸: (${adjustedX}, ${adjustedY}) ${adjustedWidth}×${adjustedHeight}`);
+      console.log(`   补偿值: H±${horizontalCompensation}px, V±${verticalCompensation}px`);
       
       const imageShape = {
         type: 'image',
-        x: imageInfo.left,  // 直接使用VBA坐标
-        y: imageInfo.top,   // 直接使用VBA坐标
+        x: adjustedX,  // 使用调整后的位置
+        y: adjustedY,  // 使用调整后的位置
         props: {
-          w: adjustedWidth,  // 使用调整后的宽度
-          h: imageInfo.height, // 使用VBA的精确高度
+          w: adjustedWidth,   // 使用补偿后的宽度
+          h: adjustedHeight,  // 使用补偿后的高度
           assetId: normalizedAssetId
         }
       };

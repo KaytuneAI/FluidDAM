@@ -2,9 +2,9 @@
 setlocal ENABLEDELAYEDEXPANSION
 title Install FluidDAM (Clean)
 
-set "XLAM=%~dp0LayoutExporter_New.xlam"
+set "XLAM=%~dp0LayoutExporter.xlam"
 if not exist "%XLAM%" (
-  echo [ERROR] LayoutExporter_Clean.xlam not found next to this installer.
+  echo [ERROR] LayoutExporter.xlam not found next to this installer.
   echo First run CleanRebuild.ps1 against your source xlam.
   pause
   exit /b 1
@@ -19,7 +19,7 @@ if %errorlevel%==0 (
 set "XLSTART=%AppData%\Microsoft\Excel\XLSTART"
 if not exist "%XLSTART%" mkdir "%XLSTART%" >nul 2>&1
 
-copy /Y "%XLAM%" "%XLSTART%\LayoutExporter_Pro.xlam" >nul
+copy /Y "%XLAM%" "%XLSTART%\LayoutExporter.xlam" >nul
 
 set "OFFVER=16.0"
 set "TLKEY=HKCU\Software\Microsoft\Office\%OFFVER%\Excel\Security\Trusted Locations\FluidDAM_XLSTART"

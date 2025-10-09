@@ -310,7 +310,7 @@ export class ExcelShapeCreator {
               
               const assetId = `asset:${(globalThis.crypto?.randomUUID?.() || Math.random().toString(36).slice(2))}`;
               
-              // 1) 先把 asset 的天然尺寸设成原图尺寸（asset 只存元数据，不裁图）
+              // 1) Asset使用原图尺寸
               const naturalW = element.originalWidth || element.width;
               const naturalH = element.originalHeight || element.height;
               
@@ -322,7 +322,7 @@ export class ExcelShapeCreator {
                   typeName: "asset",
                   meta: {},
                   props: {
-                    w: naturalW,            // 用原图天然宽高
+                    w: naturalW,
                     h: naturalH,
                     src: element.url,
                     name: `Excel图片_${Date.now()}`,
@@ -332,16 +332,29 @@ export class ExcelShapeCreator {
                 }
               ]);
               
-              // 2) 使用已经fit好的尺寸和位置（来自fitImagesIntoFrames）
+              // 2) 补偿策略：扩大Shape并调整位置
+              // 补偿参数（可调整以恢复被裁剪的细节）
+              const horizontalCompensation = 12; // 左右各补偿12像素
+              const verticalCompensation = 8;   // 上下各补偿8像素
+              
               const drawX = element.x * this.scale;
               const drawY = element.y * this.scale;
               const drawW = element.width * this.scale;
               const drawH = element.height * this.scale;
               
-              // 尝试添加一些补偿来避免裁剪
-              const compensation = 0; // 左右各补偿2像素
-              const finalW = Math.max(1, drawW + compensation * 2);
-              const finalH = Math.max(1, drawH);
+              // Shape尺寸 = Excel尺寸 + 补偿
+              const finalW = Math.max(1, drawW + horizontalCompensation * 2);
+              const finalH = Math.max(1, drawH + verticalCompensation * 2);
+              
+              // 调整位置使图片视觉中心与Excel对齐
+              // 向左上偏移补偿量，使补偿后的图片中心与原位置对齐
+              const finalX = drawX - horizontalCompensation;
+              const finalY = drawY - verticalCompensation;
+              
+              console.log(`📐 图片补偿:`);
+              console.log(`   Excel位置/尺寸: (${drawX.toFixed(1)}, ${drawY.toFixed(1)}) ${drawW.toFixed(1)}×${drawH.toFixed(1)}`);
+              console.log(`   补偿后位置/尺寸: (${finalX.toFixed(1)}, ${finalY.toFixed(1)}) ${finalW.toFixed(1)}×${finalH.toFixed(1)}`);
+              console.log(`   补偿值: H±${horizontalCompensation}px, V±${verticalCompensation}px`);
               
               if (isNaN(drawX) || isNaN(drawY) || isNaN(finalW) || isNaN(finalH) || finalW <= 0 || finalH <= 0) {
                 console.warn('图片元素坐标无效，跳过:', { 
@@ -357,15 +370,15 @@ export class ExcelShapeCreator {
               
               // 图片形状创建完成
               
-              // 3) 创建图片shape，使用正确的props.w/h尺寸
+              // 3) 创建图片shape，使用补偿后的尺寸和位置
               shape = {
                 type: 'image',
                 parentId: parentId,
-                x: drawX,
-                y: drawY,
+                x: finalX,
+                y: finalY,
                 props: {
-                  w: finalW,  // 使用fit后的尺寸
-                  h: finalH, // 使用fit后的尺寸
+                  w: finalW,
+                  h: finalH,
                   assetId: assetId
                 }
               };
