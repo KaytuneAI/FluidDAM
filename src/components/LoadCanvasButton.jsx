@@ -151,18 +151,18 @@ export default function LoadCanvasButton({ editor, setIsLoading }) {
         throw new Error(`LayoutJson sheet第${targetRow}行中没有找到有效数据`);
       }
       
-      // 5. 解析JSON
+      // 4. 解析JSON
       const layoutData = JSON.parse(jsonContent);
       console.log('成功解析布局数据:', layoutData);
       
-      // 6. 清空当前画布
+      // 5. 清空当前画布
       const currentShapes = editor.getCurrentPageShapes();
       if (currentShapes.length > 0) {
         const shapeIds = currentShapes.map(shape => shape.id);
         editor.deleteShapes(shapeIds);
       }
       
-      // 7. 处理布局数据并创建形状
+      // 6. 处理布局数据并创建形状
       await processLayoutData(layoutData, file);
       
       // 6.5 触发自动保存，确保导入的内容被保存
@@ -873,7 +873,7 @@ export default function LoadCanvasButton({ editor, setIsLoading }) {
       {/* 加载画布按钮 */}
         <button
           onClick={openFileDialog}
-         title="加载画布(JSON)或Excel布局重构 - 支持多工作表选择"
+         title="加载画布(JSON)或Excel布局重构"
          style={{
            fontSize: 12,
            padding: "2px",

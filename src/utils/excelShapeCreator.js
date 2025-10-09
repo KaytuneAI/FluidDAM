@@ -339,7 +339,7 @@ export class ExcelShapeCreator {
               const drawH = element.height * this.scale;
               
               // 尝试添加一些补偿来避免裁剪
-              const compensation = 2; // 左右各补偿2像素
+              const compensation = 0; // 左右各补偿2像素
               const finalW = Math.max(1, drawW + compensation * 2);
               const finalH = Math.max(1, drawH);
               

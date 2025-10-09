@@ -303,7 +303,7 @@ Private Function BuildSheetJson(ByVal ws As Worksheet, _
 
     sb = "{"
     sb = sb & Q("version") & ":" & Q("layout.v1") & ","
-    sb = sb & Q("generatedAt") & ":" & Q(Format$(Now, "yyyy-mm-dd\THH:NN:SS")) & ","
+    sb = sb & Q("generatedAt") & ":" & Q(Format$(Now, "yyyy-mm-dd\THH:NN:SS\Z")) & ","
     sb = sb & Q("units") & ":" & Q("px") & ","
     sb = sb & Q("workbook") & ":" & Q(EscapeJson(ws.Parent.Name)) & ","
     sb = sb & Q("sheet") & ":{"
