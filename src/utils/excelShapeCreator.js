@@ -16,16 +16,22 @@ export class ExcelShapeCreator {
     this.dependencies = dependencies;
   }
 
-  // 计算等比缩放（contain-fit）后的显示坐标
-  computeContainFit(x, y, wCell, hCell, wNat, hNat, padding = 0) {
-    const innerW = Math.max(0, wCell - padding * 2);
-    const innerH = Math.max(0, hCell - padding * 2);
-    const s = Math.min(innerW / wNat, innerH / hNat);
-    const wImg = Math.max(1, wNat * s);
-    const hImg = Math.max(1, hNat * s);
-    const xImg = x + (wCell - wImg) / 2;
-    const yImg = y + (hCell - hImg) / 2;
-    return { x: Math.round(xImg), y: Math.round(yImg), w: Math.round(wImg), h: Math.round(hImg) };
+  // === ADD: contain-fit 计算函数 ===
+  computeContainFit(x, y, wCell, hCell, wNat, hNat, paddingPx = 2) {
+    const ratio = wNat / hNat;
+    const extra = (ratio > 3 || ratio < 1/3) ? 2 : 0; // 极端长宽比多留边
+    const pad = Math.max(0, paddingPx + extra);
+
+    const innerW = Math.max(0, wCell - pad * 2);
+    const innerH = Math.max(0, hCell - pad * 2);
+
+    const s = Math.min(innerW / wNat, innerH / hNat); // contain
+    const wImg = Math.max(1, Math.floor(wNat * s));   // w/h 用 floor，防 1px 溢出
+    const hImg = Math.max(1, Math.floor(hNat * s));
+    const xImg = Math.round(x + (wCell - wImg) / 2);  // x/y 用 round，防亚像素锯齿
+    const yImg = Math.round(y + (hCell - hImg) / 2);
+
+    return { x: xImg, y: yImg, w: wImg, h: hImg };
   }
 
   /**

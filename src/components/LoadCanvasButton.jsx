@@ -316,16 +316,22 @@ export default function LoadCanvasButton({ editor, setIsLoading }) {
       }
     }
 
-    // 计算等比缩放（contain-fit）后的显示坐标
-    function computeContainFit(x, y, wCell, hCell, wNat, hNat, padding = 0) {
-      const innerW = Math.max(0, wCell - padding * 2);
-      const innerH = Math.max(0, hCell - padding * 2);
-      const s = Math.min(innerW / wNat, innerH / hNat);
-      const wImg = Math.max(1, wNat * s);
-      const hImg = Math.max(1, hNat * s);
-      const xImg = x + (wCell - wImg) / 2;
-      const yImg = y + (hCell - hImg) / 2;
-      return { x: Math.round(xImg), y: Math.round(yImg), w: Math.round(wImg), h: Math.round(hImg) };
+    // === ADD: contain-fit 计算函数 ===
+    function computeContainFit(x, y, wCell, hCell, wNat, hNat, paddingPx = 2) {
+      const ratio = wNat / hNat;
+      const extra = (ratio > 3 || ratio < 1/3) ? 2 : 0; // 极端长宽比多留边
+      const pad = Math.max(0, paddingPx + extra);
+
+      const innerW = Math.max(0, wCell - pad * 2);
+      const innerH = Math.max(0, hCell - pad * 2);
+
+      const s = Math.min(innerW / wNat, innerH / hNat); // contain
+      const wImg = Math.max(1, Math.floor(wNat * s));   // w/h 用 floor，防 1px 溢出
+      const hImg = Math.max(1, Math.floor(hNat * s));
+      const xImg = Math.round(x + (wCell - wImg) / 2);  // x/y 用 round，防亚像素锯齿
+      const yImg = Math.round(y + (hCell - hImg) / 2);
+
+      return { x: xImg, y: yImg, w: wImg, h: hImg };
     }
 
     // 提取图片创建函数
@@ -383,43 +389,39 @@ export default function LoadCanvasButton({ editor, setIsLoading }) {
       const normalizedAssetId = assetId.startsWith('asset:') ? assetId : `asset:${assetId}`;
       
       // 获取图片的原始尺寸（从asset创建时获取的naturalWidth/naturalHeight）
-      const naturalWidth = imageData.naturalWidth || imageInfo.width;
-      const naturalHeight = imageData.naturalHeight || imageInfo.height;
+      const naturalW = imageData.naturalWidth || imageInfo.width;
+      const naturalH = imageData.naturalHeight || imageInfo.height;
       
-      console.log(`🔍 图片分析: Excel尺寸${imageInfo.width}×${imageInfo.height}, 原始尺寸${naturalWidth}×${naturalHeight}`);
+      console.log(`🔍 图片分析: Excel尺寸${imageInfo.width}×${imageInfo.height}, 原始尺寸${naturalW}×${naturalH}`);
       
-      // 使用contain-fit模式计算显示坐标
+      // === REPLACE: 使用 contain-fit 计算最终 x/y/w/h ===
       const { x, y, w, h } = computeContainFit(
         imageInfo.left,
         imageInfo.top,
         imageInfo.width,
         imageInfo.height,
-        naturalWidth,
-        naturalHeight,
-        2 // padding: 2px
+        naturalW,      // 注意：是预加载得到的 natural 宽
+        naturalH,      //       与上面 natural 高
+        2              // 基础 padding，可按需 2~6
       );
       
       console.log(`📐 Contain-fit处理:`);
       console.log(`   Excel位置/尺寸: (${imageInfo.left}, ${imageInfo.top}) ${imageInfo.width}×${imageInfo.height}`);
       console.log(`   Contain-fit后: (${x}, ${y}) ${w}×${h}`);
-      console.log(`   缩放比例: ${(w/naturalWidth).toFixed(3)}x (宽) / ${(h/naturalHeight).toFixed(3)}x (高)`);
+      console.log(`   缩放比例: ${(w/naturalW).toFixed(3)}x (宽) / ${(h/naturalH).toFixed(3)}x (高)`);
       
       const imageShape = {
         type: 'image',
-        x: x,
-        y: y,
+        x,
+        y,
         props: {
-          w: w,
-          h: h,
+          w,
+          h,
           assetId: normalizedAssetId,
-          crop: { 
-            topLeft: { x: 0, y: 0 }, 
-            bottomRight: { x: 1, y: 1 } 
-          } // 确保无裁剪
-        }
+          // 显式清空历史裁剪（若之前曾使用过 crop）
+          crop: { topLeft: { x: 0, y: 0 }, bottomRight: { x: 1, y: 1 } },
+        },
       };
-      
-      // 图片宽度补偿已应用，确保无裁剪
       
       editor.createShape(imageShape);
       // 图片形状创建完成
