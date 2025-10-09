@@ -4,7 +4,7 @@
  */
 
 import { createTextFitConfig, shrinkAndRefitTextShape, createSafeRichText } from './textFitUtils.js';
-import { createImageFrameShape } from './imageFrameUtils.js';
+import { createImageFrameShape } from './frameUtils.js';
 
 /**
  * Excel形状创建器类

@@ -43,15 +43,13 @@ import {
 } from './excel/utils/drawml.js';
 
 import {
-  extractImages,
   compressImage,
   getImageTextOverlays,
-} from './excel/utils/images.js';
+} from './imageUtils.js';
 
 // 已删除frame处理工具导入
 
-// 导入图片处理模块
-import { ExcelImageProcessor } from './excelImageProcessor.js';
+// 图片处理模块已删除，现在使用LoadCanvasButton中的contain-fit模式
 
 // 导入文字提取模块
 import { ExcelTextExtractor } from './excelTextExtractor.js';
@@ -88,14 +86,7 @@ export class ExcelToTLDrawConverter {
     this.editor = editor;
     this.scale = scale; // 整体缩放系数
     this.batchSize = 100; // 批量处理大小
-    // 初始化图片处理器，传入必要的依赖方法
-    this.imageProcessor = new ExcelImageProcessor(scale, {
-      calculateOffsets: this.calculateOffsets.bind(this),
-      getCellPixelBoundsPrecise: this.getCellPixelBoundsPrecise.bind(this)
-    }, {
-      fitMode: 'anchor',       // 默认尊重锚点
-      minSize: { w: 34, h: 34 } // 防止太小
-    });
+    // 图片处理器已删除，现在使用LoadCanvasButton中的contain-fit模式
     // 初始化文字提取器，传入必要的依赖方法
     this.textExtractor = new ExcelTextExtractor({
       isInMergedCell: this.isInMergedCell.bind(this),
@@ -489,15 +480,7 @@ export class ExcelToTLDrawConverter {
       return { texts: drawingTexts, images: drawingImages };
   }
 
-  /**
-   * 提取图片元素
-   * @param {Object} worksheet - Excel工作表
-   * @returns {Array} 图片信息数组
-   */
-  async extractImages(worksheet) {
-    // 使用图片处理器提取图片
-    return await this.imageProcessor.extractImages(worksheet);
-  }
+  // extractImages方法已删除，现在使用LoadCanvasButton中的图片处理逻辑
 
   /**
    * 从drawings中提取文本框

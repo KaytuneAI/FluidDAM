@@ -49,7 +49,7 @@ import {
 
 import { 
   getImageTextOverlays 
-} from './excel/utils/images.js';
+} from './imageUtils.js';
 
 import { 
   mapColorToTLDraw, 

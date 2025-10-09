@@ -1,150 +1,133 @@
-// Frame相关工具函数
+/**
+ * Frame工具函数
+ * 从imageFrameUtils.js迁移过来的必要函数
+ */
 
-// 选择最小的包含frame
-export function findTargetFrame(editor) {
-  // 1) If user explicitly selected a frame, honor that selection
-  try {
-    const selected = editor.getSelectedShapes?.() || []
-    const selectedFrame = selected.find((s) => s.type === 'frame')
-    if (selectedFrame) return selectedFrame
-  } catch {}
-
-  // 2) Otherwise, use pointer page point (or viewport center)
-  let focus
-  try {
-    const vb = editor.getViewportPageBounds?.()
-    const center = vb ? { x: (vb.minX + vb.maxX) / 2, y: (vb.minY + vb.maxY) / 2 } : { x: 0, y: 0 }
-    const inp = editor.inputs
-    focus = (inp && inp.currentPagePoint) ? inp.currentPagePoint : center
-  } catch {
-    focus = { x: 0, y: 0 }
-  }
-
-  // Collect frames on current page
-  const frames = editor.getCurrentPageShapes?.().filter((s) => s.type === 'frame') || []
-  if (!frames.length) return null
-
-  // 2a) Prefer frames that CONTAIN the focus point; among them choose the smallest by area
-  const containing = frames.filter((f) => {
-    try { return editor.isPointInShape(f, focus, { hitInside: true }) } catch { return false }
-  })
-  if (containing.length) {
-    return containing.sort((a, b) => (a.props.w * a.props.h) - (b.props.w * b.props.h))[0]
-  }
-
-  // 3) Fallback: nearest-by-center
-  let best = null, bestD = Infinity
-  for (const f of frames) {
-    const b = editor.getShapeBounds(f)
-    const cx = (b.minX + b.maxX) / 2
-    const cy = (b.minY + b.maxY) / 2
-    const dx = cx - focus.x, dy = cy - focus.y
-    const d = dx*dx + dy*dy
-    if (d < bestD) { best = f; bestD = d }
-  }
-  return best
-}
-
-// 获取frame下方的SKU文字
-export function getSKUFromFrame(editor, frame) {
-  try {
-    // 使用frame的坐标和尺寸计算边界
-    const frameX = frame.x;
-    const frameY = frame.y;
-    const frameW = frame.props.w;
-    const frameH = frame.props.h;
-    const frameBottom = frameY + frameH;
-    
-    // 获取所有文字形状
-    const allShapes = editor.getCurrentPageShapes();
-    const textShapes = allShapes.filter(shape => shape.type === 'text');
-    
-    // 找到frame下方最近的文字（SKU）
-    let closestText = null;
-    let minDistance = Infinity;
-    
-    for (const textShape of textShapes) {
-      const textX = textShape.x;
-      const textY = textShape.y;
-      const textW = textShape.props.w;
-      const textH = textShape.props.h;
-      const textTop = textY;
-      
-      // 检查文字是否在frame下方且水平位置相近
-      if (textTop > frameBottom && 
-          textX >= frameX - 50 && 
-          textX <= frameX + frameW + 50) {
-        const distance = textTop - frameBottom;
-        if (distance < minDistance && distance < 100) { // 限制在100px范围内
-          minDistance = distance;
-          closestText = textShape;
-        }
-      }
-    }
-    
-    if (closestText) {
-      // 提取SKU代码（假设SKU是文字的最后部分）
-      const textContent = closestText.props.richText || '';
-      let textString = '';
-      
-      // 处理Tldraw v3的richText格式
-      if (typeof textContent === 'string') {
-        textString = textContent;
-      } else if (Array.isArray(textContent)) {
-        textString = textContent.map(item => item.text || '').join('');
-      } else if (textContent && typeof textContent === 'object') {
-        // 如果是对象，尝试提取text属性
-        textString = textContent.text || JSON.stringify(textContent);
-      } else {
-        textString = String(textContent);
-      }
-      
-      // 提取SKU（匹配类似S012、DC15、Art B等格式）
-      const skuMatch = textString.match(/([A-Z]{1,3}\d{2,3}|[A-Za-z]{2,4}\s+[A-Z])/);
-      return skuMatch ? skuMatch[1] : null;
-    }
-    
+/**
+ * 创建图片frame的形状对象（用于调试显示）
+ * @param {Object} frameInfo - frame信息
+ * @param {number} scale - 缩放比例
+ * @returns {Object} TLDraw形状对象
+ */
+export function createImageFrameShape(frameInfo, scale = 1) {
+  const frameX = frameInfo.x * scale;
+  const frameY = frameInfo.y * scale;
+  const frameW = frameInfo.width * scale;
+  const frameH = frameInfo.height * scale;
+  
+  if (isNaN(frameX) || isNaN(frameY) || isNaN(frameW) || isNaN(frameH)) {
+    console.warn('frame元素坐标无效，跳过:', { 
+      frameInfo, 
+      frameX, 
+      frameY, 
+      frameW, 
+      frameH,
+      scale 
+    });
     return null;
-  } catch (error) {
-    return null;
-  }
-}
-
-// 健壮的获取Frame边界方法
-export function getFrameBounds(editor, frame) {
-  try {
-    // 依次尝试不同的方法
-    if (typeof editor.getShapePageBounds === 'function') {
-      return editor.getShapePageBounds(frame.id);
-    }
-    if (typeof editor.getPageBounds === 'function') {
-      return editor.getPageBounds(frame.id);
-    }
-    if (typeof editor.getBounds === 'function') {
-      return editor.getBounds(frame.id);
-    }
-  } catch (error) {
-    // 如果所有方法都失败，回退到手动计算
   }
   
-  // 回退方案：使用shape自带的属性计算边界
+  // 判断是否为图片frame（通过ID判断）
+  const isImageFrame = frameInfo.id && frameInfo.id.startsWith('frame:image');
+  
   return {
-    minX: frame.x,
-    minY: frame.y,
-    maxX: frame.x + frame.props.w,
-    maxY: frame.y + frame.props.h,
-    width: frame.props.w,
-    height: frame.props.h
+    type: 'geo',
+    x: frameX,
+    y: frameY,
+    props: {
+      geo: 'rectangle',
+      w: frameW,
+      h: frameH,
+      fill: 'none',
+      color: isImageFrame ? 'red' : 'black', // 图片frame用红色，表格frame用黑色
+      dash: isImageFrame ? 'dashed' : 'solid' // 图片frame用虚线，表格frame用实线
+    }
   };
 }
 
-// center-fit into frame (contain)
-export function fitContain(imgW, imgH, frameW, frameH, padding=0) {
-  // 参考插入图片的逻辑：90%缩放 + 垂直偏上定位
-  const scale = Math.min(frameW / imgW, frameH / imgH) * 0.9;
-  const w = Math.max(1, Math.round(imgW * scale));
-  const h = Math.max(1, Math.round(imgH * scale));
-  const ox = Math.round((frameW - w) / 2);  // 水平居中
-  const oy = Math.round((frameH - h) * 0.25);  // 垂直偏上（从25%位置开始）
+/**
+ * 获取frame的边界信息
+ * @param {Object} editor - TLDraw编辑器实例
+ * @param {Object} frame - frame形状对象
+ * @returns {Object} frame边界信息 {minX, minY, width, height}
+ */
+export function getFrameBounds(editor, frame) {
+  if (!frame || !frame.x !== undefined || !frame.y !== undefined) {
+    return null;
+  }
+  
+  return {
+    minX: frame.x,
+    minY: frame.y,
+    width: frame.props?.w || 100,
+    height: frame.props?.h || 100
+  };
+}
+
+/**
+ * 计算contain-fit的尺寸和偏移
+ * @param {number} imgW - 图片宽度
+ * @param {number} imgH - 图片高度
+ * @param {number} frameW - frame宽度
+ * @param {number} frameH - frame高度
+ * @param {number} padding - 内边距
+ * @returns {Object} {w, h, ox, oy} 适配后的尺寸和偏移
+ */
+export function fitContain(imgW, imgH, frameW, frameH, padding = 0) {
+  const availableW = Math.max(1, frameW - padding * 2);
+  const availableH = Math.max(1, frameH - padding * 2);
+  
+  const scale = Math.min(availableW / imgW, availableH / imgH);
+  const w = Math.max(1, imgW * scale);
+  const h = Math.max(1, imgH * scale);
+  
+  const ox = (frameW - w) / 2;
+  const oy = (frameH - h) / 2;
+  
   return { w, h, ox, oy };
+}
+
+/**
+ * 从frame中获取SKU代码
+ * @param {Object} editor - TLDraw编辑器实例
+ * @param {Object} frame - frame形状对象
+ * @returns {string|null} SKU代码或null
+ */
+export function getSKUFromFrame(editor, frame) {
+  if (!frame || !frame.id) {
+    return null;
+  }
+  
+  try {
+    // 获取frame下方的文本形状
+    const allShapes = editor.getCurrentPageShapes();
+    const frameBounds = getFrameBounds(editor, frame);
+    
+    if (!frameBounds) {
+      return null;
+    }
+    
+    // 查找frame下方的文本形状
+    const textShapes = allShapes.filter(shape => 
+      shape.type === 'text' && 
+      shape.x >= frameBounds.minX && 
+      shape.x <= frameBounds.minX + frameBounds.width &&
+      shape.y > frameBounds.minY + frameBounds.height &&
+      shape.y < frameBounds.minY + frameBounds.height + 50 // 在frame下方50px内
+    );
+    
+    // 返回第一个文本形状的内容作为SKU
+    if (textShapes.length > 0) {
+      const textShape = textShapes[0];
+      // 从richText中提取纯文本
+      if (textShape.props?.richText) {
+        return textShape.props.richText.map(item => item.text).join('').trim();
+      }
+    }
+    
+    return null;
+  } catch (error) {
+    console.warn('获取frame SKU失败:', error);
+    return null;
+  }
 }
