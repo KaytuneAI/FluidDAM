@@ -1,14 +1,85 @@
-import React, { useRef } from "react";
+import React, { useRef, useState } from "react";
 import { loadSnapshot } from "tldraw";
 import ExcelJS from 'exceljs';
 import { toRichText } from 'tldraw';
 import storageManager from '../utils/storageManager.js';
+import SheetSelectionDialog from './SheetSelectionDialog.jsx';
 
 export default function LoadCanvasButton({ editor, setIsLoading }) {
   const fileInputRef = useRef(null);
+  const [showSheetDialog, setShowSheetDialog] = useState(false);
+  const [currentFile, setCurrentFile] = useState(null);
+
+  // 检测是否有多个工作表导出
+  const checkMultipleSheets = async (file) => {
+    try {
+      const workbook = new ExcelJS.Workbook();
+      await workbook.xlsx.load(file);
+      
+      const layoutSheet = workbook.getWorksheet('LayoutJson');
+      if (!layoutSheet) {
+        return { hasMultiple: false, sheets: [] };
+      }
+
+      const maxRow = layoutSheet.rowCount;
+      const availableSheets = [];
+
+      for (let row = 1; row <= maxRow; row++) {
+        const cellValue = layoutSheet.getCell(row, 1).value;
+        
+        if (cellValue && typeof cellValue === 'string' && cellValue.length > 0) {
+          if (cellValue.includes('"sheet":{') && cellValue.includes('"name":')) {
+            try {
+              const sheetName = extractSheetNameFromJson(cellValue);
+              if (sheetName) {
+                availableSheets.push({
+                  name: sheetName,
+                  row: row,
+                  hasMultipleColumns: layoutSheet.getCell(row, 2).value && 
+                                   layoutSheet.getCell(row, 2).value.length > 0
+                });
+              }
+            } catch (parseError) {
+              console.warn(`解析第${row}行JSON失败:`, parseError);
+            }
+          }
+        }
+      }
+
+      return {
+        hasMultiple: availableSheets.length > 1,
+        sheets: availableSheets
+      };
+    } catch (error) {
+      console.error('检测多工作表失败:', error);
+      return { hasMultiple: false, sheets: [] };
+    }
+  };
+
+  // 从JSON字符串中提取工作表名称
+  const extractSheetNameFromJson = (jsonStr) => {
+    try {
+      const searchPattern = '"sheet":{"name":"';
+      const startPos = jsonStr.indexOf(searchPattern);
+      
+      if (startPos > -1) {
+        const nameStart = startPos + searchPattern.length;
+        const nameEnd = jsonStr.indexOf('"', nameStart);
+        
+        if (nameEnd > nameStart) {
+          return jsonStr.substring(nameStart, nameEnd);
+        }
+      }
+      
+      return null;
+    } catch (error) {
+      console.warn('提取工作表名称失败:', error);
+      return null;
+    }
+  };
 
   // Excel处理函数
-  const processExcelFile = async (file) => {
+  const processExcelFile = async (file, selectedSheet = null) => {
     const loadingMessage = document.createElement('div');
     loadingMessage.textContent = '正在读取Excel文件中的LayoutJson...';
     loadingMessage.style.cssText = `
@@ -38,31 +109,38 @@ export default function LoadCanvasButton({ editor, setIsLoading }) {
         throw new Error('未找到LayoutJson sheet');
       }
       
-      // 3. 检查是否分割的JSON（横向扩展模式）
+      // 3. 确定要读取的行
+      let targetRow = 1; // 默认第一行
+      if (selectedSheet) {
+        targetRow = selectedSheet.row;
+        console.log(`加载选中的工作表: ${selectedSheet.name} (第${targetRow}行)`);
+      }
+      
+      // 4. 检查是否分割的JSON（横向扩展模式）
       let jsonContent = '';
       
-      // 先尝试从A1读取单个JSON
-      const singleJson = layoutSheet.getCell('A1').value;
+      // 从指定行读取JSON
+      const singleJson = layoutSheet.getCell(targetRow, 1).value;
       if (singleJson && singleJson.length > 0) {
-        // 检查B1是否有内容，如果有则说明是横向分割的JSON
-        const secondChunk = layoutSheet.getCell('B1').value;
+        // 检查下一列是否有内容，如果有则说明是横向分割的JSON
+        const secondChunk = layoutSheet.getCell(targetRow, 2).value;
         if (secondChunk && secondChunk.length > 0) {
           // 横向分割的JSON，需要重新组合
-          console.log('检测到横向分割的JSON');
+          console.log(`检测到第${targetRow}行横向分割的JSON`);
           
-          // 横向读取：A1, B1, C1, D1...
+          // 横向读取：A{targetRow}, B{targetRow}, C{targetRow}...
           let columnIndex = 1;
-          let chunk = layoutSheet.getCell(1, columnIndex).value;
+          let chunk = layoutSheet.getCell(targetRow, columnIndex).value;
           
           while (chunk && chunk.length > 0) {
             jsonContent += chunk;
             columnIndex++;
-            chunk = layoutSheet.getCell(1, columnIndex).value;
+            chunk = layoutSheet.getCell(targetRow, columnIndex).value;
           }
           
           console.log(`横向分割的JSON，总列数: ${columnIndex - 1}`);
         } else {
-          // 单个JSON，直接从A1读取
+          // 单个JSON，直接从指定行读取
           jsonContent = singleJson;
         }
       }
@@ -70,21 +148,21 @@ export default function LoadCanvasButton({ editor, setIsLoading }) {
       console.log('读取到JSON内容长度:', jsonContent.length);
       
       if (!jsonContent) {
-        throw new Error('LayoutJson sheet中没有找到有效数据');
+        throw new Error(`LayoutJson sheet第${targetRow}行中没有找到有效数据`);
       }
       
-      // 4. 解析JSON
+      // 5. 解析JSON
       const layoutData = JSON.parse(jsonContent);
       console.log('成功解析布局数据:', layoutData);
       
-      // 5. 清空当前画布
+      // 6. 清空当前画布
       const currentShapes = editor.getCurrentPageShapes();
       if (currentShapes.length > 0) {
         const shapeIds = currentShapes.map(shape => shape.id);
         editor.deleteShapes(shapeIds);
       }
       
-      // 6. 处理布局数据并创建形状
+      // 7. 处理布局数据并创建形状
       await processLayoutData(layoutData, file);
       
       // 6.5 触发自动保存，确保导入的内容被保存
@@ -728,7 +806,7 @@ export default function LoadCanvasButton({ editor, setIsLoading }) {
     }
   };
 
-  const handleFileSelect = (event) => {
+  const handleFileSelect = async (event) => {
     const file = event.target.files[0];
     if (file) {
       // 检测文件类型，分别处理
@@ -740,7 +818,21 @@ export default function LoadCanvasButton({ editor, setIsLoading }) {
                  file.name.endsWith('.xlsx') || 
                  file.name.endsWith('.xls')) {
         console.log('检测到Excel文件，使用Excel布局重构逻辑');
-        processExcelFile(file);
+        
+        // 检查是否有多个工作表导出
+        const sheetInfo = await checkMultipleSheets(file);
+        
+        if (sheetInfo.hasMultiple) {
+          // 显示工作表选择对话框
+          setCurrentFile(file);
+          setShowSheetDialog(true);
+        } else if (sheetInfo.sheets.length === 1) {
+          // 只有一个工作表，直接加载
+          processExcelFile(file, sheetInfo.sheets[0]);
+        } else {
+          // 没有找到有效的工作表数据
+          alert('LayoutJson工作表中没有找到有效的导出数据');
+        }
       } else {
         alert('请选择有效的JSON或Excel文件');
       }
@@ -753,6 +845,18 @@ export default function LoadCanvasButton({ editor, setIsLoading }) {
     if (fileInputRef.current) {
       fileInputRef.current.click();
     }
+  };
+
+  // 处理工作表选择
+  const handleSheetSelect = (selectedSheet) => {
+    setShowSheetDialog(false);
+    processExcelFile(currentFile, selectedSheet);
+  };
+
+  // 取消工作表选择
+  const handleSheetCancel = () => {
+    setShowSheetDialog(false);
+    setCurrentFile(null);
   };
 
   return (
@@ -769,7 +873,7 @@ export default function LoadCanvasButton({ editor, setIsLoading }) {
       {/* 加载画布按钮 */}
         <button
           onClick={openFileDialog}
-         title="加载画布(JSON)或Excel布局重构"
+         title="加载画布(JSON)或Excel布局重构 - 支持多工作表选择"
          style={{
            fontSize: 12,
            padding: "2px",
@@ -789,6 +893,15 @@ export default function LoadCanvasButton({ editor, setIsLoading }) {
         >
           <img src="/src/assets/load_canvas.png" alt="加载画布" style={{width: 32, height: 32}} />
         </button>
+
+      {/* 工作表选择对话框 */}
+      {showSheetDialog && currentFile && (
+        <SheetSelectionDialog
+          file={currentFile}
+          onSheetSelect={handleSheetSelect}
+          onCancel={handleSheetCancel}
+        />
+      )}
     </>
   );
 }

@@ -18,6 +18,7 @@ Public Sub ListAllBorders_OnAction(control As IRibbonControl)
 End Sub
 
 Public Sub RefreshCache_OnAction(control As IRibbonControl)
+    ListExportedSheets
 End Sub
 
 Public Sub OpenDocs_OnAction(control As IRibbonControl)
@@ -54,22 +55,36 @@ Public Sub ExportLayoutWin()
 
     Dim tgt As Worksheet
     Set tgt = EnsureLayoutJsonSheet(wb)
-    tgt.Cells.Clear
+    
+    ' 检测当前工作表是否已经导出过，并确定存储位置
+    Dim targetRow As Long
+    Dim isUpdate As Boolean
+    targetRow = FindSheetExportRow(tgt, ws.Name, isUpdate)
+    
+    ' 清除目标行的内容
+    ClearRowContent tgt, targetRow
     
     ' 检查JSON长度，如果超过32K则分割
     If Len(json) > 32000 Then
-        SplitJsonToCells tgt, json
+        SplitJsonToCells tgt, json, targetRow
     Else
-        tgt.Range("A1").Value2 = json
+        tgt.Cells(targetRow, 1).Value2 = json
     End If
     
     tgt.Columns("A").ColumnWidth = 120    ' just for readability
 
     Application.ScreenUpdating = True
 
-    MsgBox "Exported to sheet: " & tgt.Name & vbCrLf & _
+    Dim actionMsg As String
+    If isUpdate Then
+        actionMsg = "Updated existing export for sheet: " & ws.Name
+    Else
+        actionMsg = "New export added for sheet: " & ws.Name & " (Row " & targetRow & ")"
+    End If
+
+    MsgBox actionMsg & vbCrLf & _
+           "Target sheet: " & tgt.Name & vbCrLf & _
            "Workbook: " & wb.Name & vbCrLf & _
-           "Sheet: " & ws.Name & vbCrLf & _
            "Cells (non-empty): " & outCells & vbCrLf & _
            "Textboxes: " & outText & vbCrLf & _
            "Images: " & outPics & vbCrLf & _
@@ -81,8 +96,43 @@ FAIL:
     MsgBox "Export failed: #" & Err.Number & " - " & Err.Description, vbExclamation, "Layout export"
 End Sub
 
+' ================= 多工作表导出支持函数 =================
+' 检测工作表是否已经导出过，返回目标行号和是否为更新操作
+Private Function FindSheetExportRow(ByVal tgt As Worksheet, ByVal sheetName As String, ByRef isUpdate As Boolean) As Long
+    Dim maxRow As Long: maxRow = tgt.Cells(tgt.Rows.Count, 1).End(xlUp).Row
+    Dim row As Long
+    
+    ' 遍历所有已使用的行，查找是否已有该工作表的导出
+    For row = 1 To maxRow
+        Dim cellValue As String
+        cellValue = CStr(tgt.Cells(row, 1).Value2)
+        
+        ' 检查JSON中是否包含当前工作表名称
+        If InStr(cellValue, Q("sheet") & ":{" & Q("name") & ":" & Q(sheetName)) > 0 Then
+            isUpdate = True
+            FindSheetExportRow = row
+            Exit Function
+        End If
+    Next row
+    
+    ' 如果没有找到，返回下一个空白行
+    isUpdate = False
+    FindSheetExportRow = maxRow + 1
+End Function
+
+' 清除指定行的所有内容
+Private Sub ClearRowContent(ByVal ws As Worksheet, ByVal row As Long)
+    Dim lastCol As Long
+    lastCol = ws.Cells(row, ws.Columns.Count).End(xlToLeft).Column
+    If lastCol > 1 Then
+        ws.Range(ws.Cells(row, 1), ws.Cells(row, lastCol)).Clear
+    ElseIf ws.Cells(row, 1).Value2 <> "" Then
+        ws.Cells(row, 1).Clear
+    End If
+End Sub
+
 ' ================= JSON分割函数 =================
-Private Sub SplitJsonToCells(ByVal ws As Worksheet, ByVal json As String)
+Private Sub SplitJsonToCells(ByVal ws As Worksheet, ByVal json As String, ByVal startRow As Long)
     Dim chunkSize As Long: chunkSize = 30000  ' 留一些余量，避免32K限制
     Dim totalLen As Long: totalLen = Len(json)
     Dim chunkCount As Long: chunkCount = Int(totalLen / chunkSize) + 1
@@ -93,8 +143,8 @@ Private Sub SplitJsonToCells(ByVal ws As Worksheet, ByVal json As String)
         Dim endPos As Long: endPos = IIf(i * chunkSize > totalLen, totalLen, i * chunkSize)
         
         Dim chunk As String: chunk = Mid(json, startPos, endPos - startPos + 1)
-        ' 横向扩展：第1块放在A1，第2块放在B1，第3块放在C1...
-        ws.Cells(1, i).Value2 = chunk
+        ' 横向扩展：第1块放在指定行的A列，第2块放在B列，第3块放在C列...
+        ws.Cells(startRow, i).Value2 = chunk
     Next i
 End Sub
 
@@ -176,6 +226,69 @@ Public Sub ListAllBorders()
            "Detailed information has been output to immediate window, press Ctrl+G to view", vbInformation
 End Sub
 
+' 新增：列出所有已导出的工作表信息
+Public Sub ListExportedSheets()
+    Dim wb As Workbook
+    Set wb = ActiveWorkbook
+    
+    Dim tgt As Worksheet
+    Set tgt = EnsureLayoutJsonSheet(wb)
+    
+    Dim maxRow As Long: maxRow = tgt.Cells(tgt.Rows.Count, 1).End(xlUp).Row
+    Dim exportedSheets As String: exportedSheets = ""
+    Dim count As Long: count = 0
+    
+    Debug.Print "=== Exported Sheets in LayoutJson ==="
+    
+    Dim row As Long
+    For row = 1 To maxRow
+        Dim cellValue As String
+        cellValue = CStr(tgt.Cells(row, 1).Value2)
+        
+        ' 检查JSON中是否包含工作表信息
+        If InStr(cellValue, Q("sheet") & ":{" & Q("name")) > 0 Then
+            ' 提取工作表名称
+            Dim sheetName As String
+            sheetName = ExtractSheetNameFromJson(cellValue)
+            
+            If sheetName <> "" Then
+                count = count + 1
+                exportedSheets = exportedSheets & count & ". " & sheetName & " (Row " & row & ")" & vbCrLf
+                Debug.Print count & ". Sheet: " & sheetName & " | Row: " & row
+            End If
+        End If
+    Next row
+    
+    If count = 0 Then
+        MsgBox "No exported sheets found in LayoutJson", vbInformation, "Exported Sheets"
+    Else
+        MsgBox "Found " & count & " exported sheet(s):" & vbCrLf & vbCrLf & exportedSheets & _
+               "Detailed information has been output to immediate window, press Ctrl+G to view", vbInformation, "Exported Sheets"
+    End If
+End Sub
+
+' 从JSON字符串中提取工作表名称
+Private Function ExtractSheetNameFromJson(ByVal jsonStr As String) As String
+    On Error Resume Next
+    
+    ' 查找 "sheet":{"name":"工作表名称" 的模式
+    Dim startPos As Long, endPos As Long
+    Dim searchPattern As String
+    searchPattern = Q("sheet") & ":{" & Q("name") & ":" & Q("")
+    
+    startPos = InStr(jsonStr, searchPattern)
+    If startPos > 0 Then
+        startPos = startPos + Len(searchPattern)
+        ' 查找下一个引号
+        endPos = InStr(startPos, jsonStr, """")
+        If endPos > startPos Then
+            ExtractSheetNameFromJson = Mid(jsonStr, startPos, endPos - startPos)
+        End If
+    End If
+    
+    On Error GoTo 0
+End Function
+
 
 ' ================ CORE JSON BUILDER =================
 Private Function BuildSheetJson(ByVal ws As Worksheet, _
@@ -190,7 +303,7 @@ Private Function BuildSheetJson(ByVal ws As Worksheet, _
 
     sb = "{"
     sb = sb & Q("version") & ":" & Q("layout.v1") & ","
-    sb = sb & Q("generatedAt") & ":" & Q(Format$(Now, "yyyy-mm-dd\THH:NN:SS\Z")) & ","
+    sb = sb & Q("generatedAt") & ":" & Q(Format$(Now, "yyyy-mm-dd\THH:NN:SS")) & ","
     sb = sb & Q("units") & ":" & Q("px") & ","
     sb = sb & Q("workbook") & ":" & Q(EscapeJson(ws.Parent.Name)) & ","
     sb = sb & Q("sheet") & ":{"
