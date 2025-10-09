@@ -316,6 +316,18 @@ export default function LoadCanvasButton({ editor, setIsLoading }) {
       }
     }
 
+    // 计算等比缩放（contain-fit）后的显示坐标
+    function computeContainFit(x, y, wCell, hCell, wNat, hNat, padding = 0) {
+      const innerW = Math.max(0, wCell - padding * 2);
+      const innerH = Math.max(0, hCell - padding * 2);
+      const s = Math.min(innerW / wNat, innerH / hNat);
+      const wImg = Math.max(1, wNat * s);
+      const hImg = Math.max(1, hNat * s);
+      const xImg = x + (wCell - wImg) / 2;
+      const yImg = y + (hCell - hImg) / 2;
+      return { x: Math.round(xImg), y: Math.round(yImg), w: Math.round(wImg), h: Math.round(hImg) };
+    }
+
     // 提取图片创建函数
     async function createImageShape(editor, imageInfo, imageData) {
       // 检查是否已存在相同的图片（跨页面检测）
@@ -339,25 +351,11 @@ export default function LoadCanvasButton({ editor, setIsLoading }) {
         
         console.log(`🖼️ Asset尺寸分析: 自然尺寸${naturalW}×${naturalH}, Excel尺寸${imageInfo.width}×${imageInfo.height}`);
         
-        // 检查是否需要正方形策略 - 使用Excel尺寸判断
-        const excelAspectRatio = imageInfo.width / imageInfo.height;
-        const isExcelVeryWide = excelAspectRatio > 1.8;
-        
-        console.log(`🔍 Excel长宽比: ${excelAspectRatio.toFixed(2)}:1, 是否超宽:${isExcelVeryWide}`);
-        
-        let assetW, assetH;
-        if (isExcelVeryWide) {
-          // 超宽图片Asset策略：保持原始尺寸，让TLDraw的contain机制处理
-          assetW = naturalW;
-          assetH = naturalH; // 保持原始比例，让TLDraw自动处理
-          console.log(`🎯 Asset超宽策略: 保持原始尺寸${naturalW}×${naturalH}，让TLDraw处理contain`);
-        } else {
-          // 普通策略：使用原始尺寸
-          assetW = naturalW;
-          assetH = naturalH;
-        }
+        // 保存原始尺寸信息到imageData中，供后续contain-fit计算使用
+        imageData.naturalWidth = naturalW;
+        imageData.naturalHeight = naturalH;
 
-        // 创建资产
+        // 创建资产 - 使用原始尺寸
         editor.createAssets([
           {
             id: assetId,
@@ -365,8 +363,8 @@ export default function LoadCanvasButton({ editor, setIsLoading }) {
             typeName: "asset",
             meta: {},
             props: {
-              w: assetW,
-              h: assetH,
+              w: naturalW,
+              h: naturalH,
               src: imageData.url,
               name: imageInfo.name,
               mimeType: imageData.mimeType || 'image/png',
@@ -380,63 +378,44 @@ export default function LoadCanvasButton({ editor, setIsLoading }) {
         // 重用现有图片资产
       }
 
-      // 创建图片形状 - 直接使用VBA提供的精确坐标
+      // 创建图片形状 - 使用contain-fit模式确保完整显示
       // 确保assetId有正确的前缀
       const normalizedAssetId = assetId.startsWith('asset:') ? assetId : `asset:${assetId}`;
       
-       // 智能补偿策略：超宽图片使用正方形策略
-       const aspectRatio = imageInfo.width / imageInfo.height;
-       const isVeryWide = aspectRatio > 1.8; // 降低阈值到1.8:1，更容易触发正方形策略
-       
-       console.log(`🔍 图片分析: ${imageInfo.width}×${imageInfo.height}, 长宽比${aspectRatio.toFixed(2)}:1, 是否超宽:${isVeryWide}`);
-       
-       let adjustedWidth, adjustedHeight, adjustedX, adjustedY;
-       
-       if (isVeryWide) {
-         // 超宽图片TLDraw兼容策略：使用更大的Shape尺寸，让TLDraw自动处理contain
-         // 根据TLDraw的设计理念，Shape尺寸应该足够大以容纳完整图片
-         const scaleFactor = 1.5; // 放大1.5倍，给图片更多空间
-         
-         adjustedWidth = imageInfo.width * scaleFactor;
-         adjustedHeight = imageInfo.height * scaleFactor;
-         
-         // 保持图片中心对齐
-         const widthOffset = (adjustedWidth - imageInfo.width) / 2;
-         const heightOffset = (adjustedHeight - imageInfo.height) / 2;
-         adjustedX = imageInfo.left - widthOffset;
-         adjustedY = imageInfo.top - heightOffset;
-         
-         console.log(`🎯 超宽图片TLDraw兼容策略: 长宽比${aspectRatio.toFixed(2)}:1`);
-         console.log(`   放大系数: ${scaleFactor}x, 尺寸: ${adjustedWidth.toFixed(1)}×${adjustedHeight.toFixed(1)}`);
-         console.log(`   位置偏移: X-${widthOffset.toFixed(1)}px, Y-${heightOffset.toFixed(1)}px`);
-       } else {
-         // 普通补偿策略：扩大Shape并调整位置
-         const horizontalCompensation = 16; // 左右各补偿16像素
-         const verticalCompensation = 8;   // 上下各补偿8像素
-         
-         adjustedWidth = imageInfo.width + horizontalCompensation * 2;
-         adjustedHeight = imageInfo.height + verticalCompensation * 2;
-         
-         // 调整位置使图片视觉中心与Excel对齐
-         adjustedX = imageInfo.left - horizontalCompensation;
-         adjustedY = imageInfo.top - verticalCompensation;
-         
-         console.log(`📐 普通图片补偿策略: H±${horizontalCompensation}px, V±${verticalCompensation}px`);
-       }
+      // 获取图片的原始尺寸（从asset创建时获取的naturalWidth/naturalHeight）
+      const naturalWidth = imageData.naturalWidth || imageInfo.width;
+      const naturalHeight = imageData.naturalHeight || imageInfo.height;
       
-       console.log(`📐 VBA图片处理:`);
-       console.log(`   Excel位置/尺寸: (${imageInfo.left}, ${imageInfo.top}) ${imageInfo.width}×${imageInfo.height}`);
-       console.log(`   处理后位置/尺寸: (${adjustedX}, ${adjustedY}) ${adjustedWidth}×${adjustedHeight}`);
-       console.log(`   策略: ${isVeryWide ? 'TLDraw兼容策略' : '普通补偿策略'}`);
+      console.log(`🔍 图片分析: Excel尺寸${imageInfo.width}×${imageInfo.height}, 原始尺寸${naturalWidth}×${naturalHeight}`);
+      
+      // 使用contain-fit模式计算显示坐标
+      const { x, y, w, h } = computeContainFit(
+        imageInfo.left,
+        imageInfo.top,
+        imageInfo.width,
+        imageInfo.height,
+        naturalWidth,
+        naturalHeight,
+        2 // padding: 2px
+      );
+      
+      console.log(`📐 Contain-fit处理:`);
+      console.log(`   Excel位置/尺寸: (${imageInfo.left}, ${imageInfo.top}) ${imageInfo.width}×${imageInfo.height}`);
+      console.log(`   Contain-fit后: (${x}, ${y}) ${w}×${h}`);
+      console.log(`   缩放比例: ${(w/naturalWidth).toFixed(3)}x (宽) / ${(h/naturalHeight).toFixed(3)}x (高)`);
       
       const imageShape = {
         type: 'image',
-        x: adjustedX,  // 使用调整后的位置
-        y: adjustedY,  // 使用调整后的位置
+        x: x,
+        y: y,
         props: {
-          w: adjustedWidth,   // 使用补偿后的宽度
-          h: adjustedHeight,  // 使用补偿后的高度
-          assetId: normalizedAssetId
+          w: w,
+          h: h,
+          assetId: normalizedAssetId,
+          crop: { 
+            topLeft: { x: 0, y: 0 }, 
+            bottomRight: { x: 1, y: 1 } 
+          } // 确保无裁剪
         }
       };
       

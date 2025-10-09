@@ -16,6 +16,18 @@ export class ExcelShapeCreator {
     this.dependencies = dependencies;
   }
 
+  // 计算等比缩放（contain-fit）后的显示坐标
+  computeContainFit(x, y, wCell, hCell, wNat, hNat, padding = 0) {
+    const innerW = Math.max(0, wCell - padding * 2);
+    const innerH = Math.max(0, hCell - padding * 2);
+    const s = Math.min(innerW / wNat, innerH / hNat);
+    const wImg = Math.max(1, wNat * s);
+    const hImg = Math.max(1, hNat * s);
+    const xImg = x + (wCell - wImg) / 2;
+    const yImg = y + (hCell - hImg) / 2;
+    return { x: Math.round(xImg), y: Math.round(yImg), w: Math.round(wImg), h: Math.round(hImg) };
+  }
+
   /**
    * 核心：把textbox适配到容器里，如果textbox在格子内就fit到格子内
    * @param {Array} texts - 文字数组（包含textbox）
@@ -349,35 +361,37 @@ export class ExcelShapeCreator {
                 }
               ]);
               
-              // 2) 补偿策略：扩大Shape并调整位置
-              // 补偿参数（可调整以恢复被裁剪的细节）
-              const horizontalCompensation = 12; // 左右各补偿12像素
-              const verticalCompensation = 8;   // 上下各补偿8像素
-              
+              // 2) 使用contain-fit模式确保图片完整显示
               const drawX = element.x * this.scale;
               const drawY = element.y * this.scale;
               const drawW = element.width * this.scale;
               const drawH = element.height * this.scale;
               
-              // Shape尺寸 = Excel尺寸 + 补偿
-              const finalW = Math.max(1, drawW + horizontalCompensation * 2);
-              const finalH = Math.max(1, drawH + verticalCompensation * 2);
+              // 获取图片的原始尺寸
+              const naturalWidth = element.naturalWidth || element.width;
+              const naturalHeight = element.naturalHeight || element.height;
               
-              // 调整位置使图片视觉中心与Excel对齐
-              // 向左上偏移补偿量，使补偿后的图片中心与原位置对齐
-              const finalX = drawX - horizontalCompensation;
-              const finalY = drawY - verticalCompensation;
+              // 计算contain-fit模式下的显示坐标
+              const { x: finalX, y: finalY, w: finalW, h: finalH } = this.computeContainFit(
+                drawX,
+                drawY,
+                drawW,
+                drawH,
+                naturalWidth,
+                naturalHeight,
+                2 // padding: 2px
+              );
               
-              console.log(`📐 图片补偿:`);
+              console.log(`📐 Contain-fit处理:`);
               console.log(`   Excel位置/尺寸: (${drawX.toFixed(1)}, ${drawY.toFixed(1)}) ${drawW.toFixed(1)}×${drawH.toFixed(1)}`);
-              console.log(`   补偿后位置/尺寸: (${finalX.toFixed(1)}, ${finalY.toFixed(1)}) ${finalW.toFixed(1)}×${finalH.toFixed(1)}`);
-              console.log(`   补偿值: H±${horizontalCompensation}px, V±${verticalCompensation}px`);
+              console.log(`   Contain-fit后: (${finalX.toFixed(1)}, ${finalY.toFixed(1)}) ${finalW.toFixed(1)}×${finalH.toFixed(1)}`);
+              console.log(`   缩放比例: ${(finalW/naturalWidth).toFixed(3)}x (宽) / ${(finalH/naturalHeight).toFixed(3)}x (高)`);
               
-              if (isNaN(drawX) || isNaN(drawY) || isNaN(finalW) || isNaN(finalH) || finalW <= 0 || finalH <= 0) {
+              if (isNaN(finalX) || isNaN(finalY) || isNaN(finalW) || isNaN(finalH) || finalW <= 0 || finalH <= 0) {
                 console.warn('图片元素坐标无效，跳过:', { 
                   element, 
-                  drawX, 
-                  drawY, 
+                  finalX, 
+                  finalY, 
                   finalW, 
                   finalH,
                   scale: this.scale 
@@ -385,9 +399,7 @@ export class ExcelShapeCreator {
                 continue;
               }
               
-              // 图片形状创建完成
-              
-              // 3) 创建图片shape，使用补偿后的尺寸和位置
+              // 3) 创建图片shape，使用contain-fit后的尺寸和位置
               shape = {
                 type: 'image',
                 parentId: parentId,
@@ -396,7 +408,11 @@ export class ExcelShapeCreator {
                 props: {
                   w: finalW,
                   h: finalH,
-                  assetId: assetId
+                  assetId: assetId,
+                  crop: { 
+                    topLeft: { x: 0, y: 0 }, 
+                    bottomRight: { x: 1, y: 1 } 
+                  } // 确保无裁剪
                 }
               };
             } catch (error) {
