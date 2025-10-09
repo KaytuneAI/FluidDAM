@@ -85,12 +85,20 @@ export class ExcelShapeCreator {
   }
 
   /**
-   * 核心：把图片 contain 到容器里，且不放大超过 100%
+   * 图片处理已移至VBA路径(LoadCanvasButton.jsx)
+   * 这里保持空实现，避免混淆
    * @param {Array} images - 图片数组
    * @param {Array} frames - 框架数组
    * @param {number} padding - 内边距，默认8像素
    */
   fitImagesIntoFrames(images, frames, padding = 0) {
+    console.log(`⚠️ ExcelJS路径的图片处理已禁用，请使用VBA路径`);
+    return images;
+  }
+
+  // 原始函数已删除，避免混淆
+  // 如需查看原始实现，请参考git历史
+  fitImagesIntoFrames_original(images, frames, padding = 0) {
     // Fidelity-first 模式：直接返回原始图片，不做任何适配处理
     if (this.dependencies.PRESERVE_EXCEL_LAYOUT) {
       console.log(`🔄 Fidelity-first模式：保持Excel原始布局，跳过图片适配处理`);
@@ -219,13 +227,22 @@ export class ExcelShapeCreator {
   }
 
   /**
-   * 将图片适配到指定的frame中（contain模式）
-   * @param {Object} imageInfo - 图片信息对象
-   * @param {Object} frameRect - frame矩形 {x, y, width, height}
-   * @param {number} padding - 内边距，默认0像素
-   * @returns {Object} 适配后的图片位置和尺寸 {x, y, width, height}
+   * 图片适配已移至VBA路径(LoadCanvasButton.jsx)
+   * 这里保持空实现，避免混淆
    */
   fitImageToFrame(imageInfo, frameRect, padding = 0) {
+    console.log(`⚠️ ExcelJS路径的图片适配已禁用，请使用VBA路径`);
+    return {
+      x: imageInfo.x || 0,
+      y: imageInfo.y || 0,
+      width: imageInfo.width || 100,
+      height: imageInfo.height || 100
+    };
+  }
+
+  // 原始函数已删除，避免混淆
+  // 如需查看原始实现，请参考git历史
+  fitImageToFrame_original(imageInfo, frameRect, padding = 0) {
     try {
       // 项目级常量：内边距和描边（改为0以避免图片被裁剪）
       const CELL_PADDING = 0;

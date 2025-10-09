@@ -336,6 +336,26 @@ export default function LoadCanvasButton({ editor, setIsLoading }) {
 
         const naturalW = img.naturalWidth || imageInfo.width;
         const naturalH = img.naturalHeight || imageInfo.height;
+        
+        console.log(`🖼️ Asset尺寸分析: 自然尺寸${naturalW}×${naturalH}, Excel尺寸${imageInfo.width}×${imageInfo.height}`);
+        
+        // 检查是否需要正方形策略 - 使用Excel尺寸判断
+        const excelAspectRatio = imageInfo.width / imageInfo.height;
+        const isExcelVeryWide = excelAspectRatio > 1.8;
+        
+        console.log(`🔍 Excel长宽比: ${excelAspectRatio.toFixed(2)}:1, 是否超宽:${isExcelVeryWide}`);
+        
+        let assetW, assetH;
+        if (isExcelVeryWide) {
+          // 超宽图片Asset策略：保持原始尺寸，让TLDraw的contain机制处理
+          assetW = naturalW;
+          assetH = naturalH; // 保持原始比例，让TLDraw自动处理
+          console.log(`🎯 Asset超宽策略: 保持原始尺寸${naturalW}×${naturalH}，让TLDraw处理contain`);
+        } else {
+          // 普通策略：使用原始尺寸
+          assetW = naturalW;
+          assetH = naturalH;
+        }
 
         // 创建资产
         editor.createAssets([
@@ -345,8 +365,8 @@ export default function LoadCanvasButton({ editor, setIsLoading }) {
             typeName: "asset",
             meta: {},
             props: {
-              w: naturalW,
-              h: naturalH,
+              w: assetW,
+              h: assetH,
               src: imageData.url,
               name: imageInfo.name,
               mimeType: imageData.mimeType || 'image/png',
@@ -364,21 +384,50 @@ export default function LoadCanvasButton({ editor, setIsLoading }) {
       // 确保assetId有正确的前缀
       const normalizedAssetId = assetId.startsWith('asset:') ? assetId : `asset:${assetId}`;
       
-      // 补偿策略：扩大Shape并调整位置
-      const horizontalCompensation = 12; // 左右各补偿12像素
-      const verticalCompensation = 8;   // 上下各补偿8像素
+       // 智能补偿策略：超宽图片使用正方形策略
+       const aspectRatio = imageInfo.width / imageInfo.height;
+       const isVeryWide = aspectRatio > 1.8; // 降低阈值到1.8:1，更容易触发正方形策略
+       
+       console.log(`🔍 图片分析: ${imageInfo.width}×${imageInfo.height}, 长宽比${aspectRatio.toFixed(2)}:1, 是否超宽:${isVeryWide}`);
+       
+       let adjustedWidth, adjustedHeight, adjustedX, adjustedY;
+       
+       if (isVeryWide) {
+         // 超宽图片TLDraw兼容策略：使用更大的Shape尺寸，让TLDraw自动处理contain
+         // 根据TLDraw的设计理念，Shape尺寸应该足够大以容纳完整图片
+         const scaleFactor = 1.5; // 放大1.5倍，给图片更多空间
+         
+         adjustedWidth = imageInfo.width * scaleFactor;
+         adjustedHeight = imageInfo.height * scaleFactor;
+         
+         // 保持图片中心对齐
+         const widthOffset = (adjustedWidth - imageInfo.width) / 2;
+         const heightOffset = (adjustedHeight - imageInfo.height) / 2;
+         adjustedX = imageInfo.left - widthOffset;
+         adjustedY = imageInfo.top - heightOffset;
+         
+         console.log(`🎯 超宽图片TLDraw兼容策略: 长宽比${aspectRatio.toFixed(2)}:1`);
+         console.log(`   放大系数: ${scaleFactor}x, 尺寸: ${adjustedWidth.toFixed(1)}×${adjustedHeight.toFixed(1)}`);
+         console.log(`   位置偏移: X-${widthOffset.toFixed(1)}px, Y-${heightOffset.toFixed(1)}px`);
+       } else {
+         // 普通补偿策略：扩大Shape并调整位置
+         const horizontalCompensation = 16; // 左右各补偿16像素
+         const verticalCompensation = 8;   // 上下各补偿8像素
+         
+         adjustedWidth = imageInfo.width + horizontalCompensation * 2;
+         adjustedHeight = imageInfo.height + verticalCompensation * 2;
+         
+         // 调整位置使图片视觉中心与Excel对齐
+         adjustedX = imageInfo.left - horizontalCompensation;
+         adjustedY = imageInfo.top - verticalCompensation;
+         
+         console.log(`📐 普通图片补偿策略: H±${horizontalCompensation}px, V±${verticalCompensation}px`);
+       }
       
-      const adjustedWidth = imageInfo.width + horizontalCompensation * 2;
-      const adjustedHeight = imageInfo.height + verticalCompensation * 2;
-      
-      // 调整位置使图片视觉中心与Excel对齐
-      const adjustedX = imageInfo.left - horizontalCompensation;
-      const adjustedY = imageInfo.top - verticalCompensation;
-      
-      console.log(`📐 VBA图片补偿:`);
-      console.log(`   Excel位置/尺寸: (${imageInfo.left}, ${imageInfo.top}) ${imageInfo.width}×${imageInfo.height}`);
-      console.log(`   补偿后位置/尺寸: (${adjustedX}, ${adjustedY}) ${adjustedWidth}×${adjustedHeight}`);
-      console.log(`   补偿值: H±${horizontalCompensation}px, V±${verticalCompensation}px`);
+       console.log(`📐 VBA图片处理:`);
+       console.log(`   Excel位置/尺寸: (${imageInfo.left}, ${imageInfo.top}) ${imageInfo.width}×${imageInfo.height}`);
+       console.log(`   处理后位置/尺寸: (${adjustedX}, ${adjustedY}) ${adjustedWidth}×${adjustedHeight}`);
+       console.log(`   策略: ${isVeryWide ? 'TLDraw兼容策略' : '普通补偿策略'}`);
       
       const imageShape = {
         type: 'image',
