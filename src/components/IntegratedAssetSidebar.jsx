@@ -6,7 +6,7 @@ import LoadCanvasButton from './LoadCanvasButton.jsx';
 import SaveCanvasButton from './SaveCanvasButton.jsx';
 import ShareCanvasButton from './ShareCanvasButton.jsx';
 
-export default function IntegratedAssetSidebar({ editor, selectedFrame, setIsLoading, platform = "TM", width, onReset }) {
+export default function IntegratedAssetSidebar({ editor, selectedFrame, setIsLoading, platform = "TM", width, onReset, collapsed, onToggleCollapse }) {
   const [usedAssetIds, setUsedAssetIds] = useState(new Set());
   const [assets, setAssets] = useState([]);
   const [forceUpdate, setForceUpdate] = useState(0);
@@ -185,7 +185,37 @@ export default function IntegratedAssetSidebar({ editor, selectedFrame, setIsLoa
         flexDirection: "column",
         gap: 8
       }}>
-        <div style={{fontWeight: 600, fontSize: 14}}>素材管理</div>
+        <div style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center"
+        }}>
+          <div style={{fontWeight: 600, fontSize: 14}}>素材管理</div>
+          <button 
+            onClick={onToggleCollapse}
+            style={{
+              fontSize: 12,
+              padding: "4px 8px",
+              border: "1px solid #d1d5db",
+              borderRadius: 4,
+              background: "#fff",
+              cursor: "pointer",
+              color: "#6b7280",
+              transition: "all 0.2s"
+            }}
+            onMouseEnter={(e) => {
+              e.target.style.background = "#f3f4f6";
+              e.target.style.borderColor = "#9ca3af";
+            }}
+            onMouseLeave={(e) => {
+              e.target.style.background = "#fff";
+              e.target.style.borderColor = "#d1d5db";
+            }}
+            title="收起面板"
+          >
+            ←
+          </button>
+        </div>
         <div style={{display: 'flex', gap: 4, flexWrap: 'nowrap', alignItems: 'center'}}>
           <InsertImageButton editor={editor} selectedFrame={selectedFrame} />
           <LoadCanvasButton editor={editor} setIsLoading={setIsLoading} />
@@ -222,7 +252,75 @@ export default function IntegratedAssetSidebar({ editor, selectedFrame, setIsLoa
           const name = a?.props?.name || a?.props?.src?.split("/").slice(-1)[0] || a.id;
           const isUsed = usedAssetIds.has(a.id);
           return (
-            <div key={a.id} style={sidebarStyles.card(isUsed)}>
+            <div 
+              key={a.id} 
+              style={{
+                ...sidebarStyles.card(isUsed),
+                cursor: 'grab'
+              }}
+              draggable={true}
+              onDragStart={(e) => {
+                e.dataTransfer.setData('application/asset-id', a.id);
+                e.dataTransfer.setData('application/asset-src', a?.props?.src || '');
+                e.dataTransfer.setData('application/asset-name', name);
+                e.dataTransfer.effectAllowed = 'copy';
+                
+                // 设置拖拽时的预览图像 - 创建合适尺寸的预览
+                const img = new Image();
+                img.src = a?.props?.src || '';
+                
+                // 创建一个合适大小的预览画布
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                canvas.width = 200;
+                canvas.height = 200;
+                
+                img.onload = () => {
+                  // 在画布上绘制缩小的图片，保持宽高比
+                  const aspectRatio = img.naturalWidth / img.naturalHeight;
+                  let drawWidth = 200;
+                  let drawHeight = 200;
+                  
+                  if (aspectRatio > 1) {
+                    // 宽图片
+                    drawHeight = 200 / aspectRatio;
+                  } else {
+                    // 高图片
+                    drawWidth = 200 * aspectRatio;
+                  }
+                  
+                  // 居中绘制
+                  const offsetX = (200 - drawWidth) / 2;
+                  const offsetY = (200 - drawHeight) / 2;
+                  
+                  ctx.drawImage(img, offsetX, offsetY, drawWidth, drawHeight);
+                  e.dataTransfer.setDragImage(canvas, 100, 100);
+                };
+                
+                // 如果图片已经加载完成
+                if (img.complete) {
+                  const aspectRatio = img.naturalWidth / img.naturalHeight;
+                  let drawWidth = 200;
+                  let drawHeight = 200;
+                  
+                  if (aspectRatio > 1) {
+                    drawHeight = 200 / aspectRatio;
+                  } else {
+                    drawWidth = 200 * aspectRatio;
+                  }
+                  
+                  const offsetX = (200 - drawWidth) / 2;
+                  const offsetY = (200 - drawHeight) / 2;
+                  
+                  ctx.drawImage(img, offsetX, offsetY, drawWidth, drawHeight);
+                  e.dataTransfer.setDragImage(canvas, 100, 100);
+                }
+              }}
+              onDragEnd={(e) => {
+                // 拖拽结束时的处理
+              }}
+              title="拖拽到画布或点击放置到Frame"
+            >
               <div style={sidebarStyles.thumbWrap}>
                 <img 
                   src={a?.props?.src} 

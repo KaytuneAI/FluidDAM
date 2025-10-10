@@ -4,6 +4,53 @@ import "tldraw/tldraw.css";
 import { getApiBaseUrl } from './utils/apiUtils.js';
 import storageManager from './utils/storageManager.js';
 
+// 读图片天然尺寸（优先用 asset，其次用 src 加载）
+async function getNaturalSize(editor, assetId, assetSrc) {
+  const normId = assetId?.startsWith('asset:') ? assetId : `asset:${assetId}`;
+  const asset = editor?.getAsset?.(normId);
+  // TLDraw 的 image asset 一般会带 w,h
+  if (asset?.props?.w && asset?.props?.h) {
+    return { w: asset.props.w, h: asset.props.h };
+  }
+  // 兜底：用 src 加载一次
+  const src = asset?.props?.src || assetSrc;
+  if (!src) return { w: 100, h: 100 };
+  const img = new Image();
+  img.crossOrigin = 'anonymous';
+  const p = new Promise((res, rej) => {
+    img.onload = () => res({ w: img.naturalWidth || 100, h: img.naturalHeight || 100 });
+    img.onerror = rej;
+  });
+  img.src = src;
+  try { return await p; } catch { return { w: 100, h: 100 }; }
+}
+
+// 计算放置尺寸：若落在 frame 内则 contain-fit 到 frame；否则按基准比例缩放并做上限/下限约束
+function computeDropSize({ natW, natH, inFrame, frameBounds, baseScale = 0.6, minSide = 80, maxSide = 960, padding = 8 }) {
+  if (inFrame && frameBounds) {
+    const innerW = Math.max(1, frameBounds.w - padding * 2);
+    const innerH = Math.max(1, frameBounds.h - padding * 2);
+    const s = Math.min(innerW / natW, innerH / natH); // contain
+    const w = Math.max(1, Math.floor(natW * s));
+    const h = Math.max(1, Math.floor(natH * s));
+    return { w, h };
+  }
+  // 画布自由放置：按基准比例缩放并夹紧
+  const s = baseScale;
+  let w = natW * s;
+  let h = natH * s;
+  const side = Math.max(w, h);
+  if (side > maxSide) {
+    const k = maxSide / side;
+    w *= k; h *= k;
+  }
+  if (Math.min(w, h) < minSide) {
+    const k = minSide / Math.min(w, h);
+    w *= k; h *= k;
+  }
+  return { w: Math.round(w), h: Math.round(h) };
+}
+
 // 导入组件
 import ResizableSidebar from './components/ResizableSidebar.jsx';
 import IntegratedAssetSidebar from './components/IntegratedAssetSidebar.jsx';
@@ -40,6 +87,7 @@ export default function MainCanvas() {
   const [forceRerender, setForceRerender] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(280);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   // 移除保存状态指示器，不再显示任何提示
   const [isAutoSaving, setIsAutoSaving] = useState(false);
@@ -880,11 +928,11 @@ export default function MainCanvas() {
     }
   };
 
-  // 处理拖拽JSON文件
+  // 处理拖拽JSON文件或素材
   const handleDragOver = (e) => {
     console.log('拖拽进入:', e.dataTransfer.types);
-    // 检查是否拖拽的是文件
-    if (e.dataTransfer.types.includes('Files')) {
+    // 检查是否拖拽的是文件或素材
+    if (e.dataTransfer.types.includes('Files') || e.dataTransfer.types.includes('application/asset-id')) {
       e.preventDefault();
       e.stopPropagation();
       setDragOver(true);
@@ -899,10 +947,115 @@ export default function MainCanvas() {
   };
 
   const handleDrop = async (e) => {
-    console.log('拖拽放下:', e.dataTransfer.files);
+    console.log('拖拽放下:', e.dataTransfer.files, e.dataTransfer.types);
     e.preventDefault();
     e.stopPropagation();
     setDragOver(false);
+    
+    // 检查是否是素材拖拽
+    if (e.dataTransfer.types.includes('application/asset-id')) {
+      const assetId = e.dataTransfer.getData('application/asset-id');
+      const assetSrc = e.dataTransfer.getData('application/asset-src');
+      const assetName = e.dataTransfer.getData('application/asset-name');
+      
+      console.log('拖拽素材到画布:', { assetId, assetSrc, assetName });
+      console.log('资产ID格式检查:', { 
+        original: assetId, 
+        hasAssetPrefix: assetId.startsWith('asset:'),
+        normalized: assetId.startsWith('asset:') ? assetId : `asset:${assetId}`
+      });
+      
+      // 检查资产是否真的存在
+      if (editorRef.current) {
+        const asset = editorRef.current.getAsset(assetId);
+        console.log('原始资产检查:', asset);
+        
+        const normalizedAssetId = assetId.startsWith('asset:') ? assetId : `asset:${assetId}`;
+        const normalizedAsset = editorRef.current.getAsset(normalizedAssetId);
+        console.log('标准化资产检查:', normalizedAsset);
+      }
+      
+      if (assetId && editorRef.current) {
+        try {
+          // 使用更简单的方法：直接使用屏幕坐标转换为画布坐标
+          const screenPoint = { x: e.clientX, y: e.clientY };
+          const pagePoint = editorRef.current.screenToPage(screenPoint);
+          
+          console.log('拖拽坐标转换:', { 
+            screen: screenPoint, 
+            page: pagePoint,
+            camera: editorRef.current.getCamera()
+          });
+          
+          // 确保assetId有正确的前缀
+          const normalizedAssetId = assetId.startsWith('asset:') ? assetId : `asset:${assetId}`;
+          
+          // 获取图片原始尺寸
+          const { w: natW, h: natH } = await getNaturalSize(editorRef.current, normalizedAssetId, assetSrc);
+
+          // 判断是否丢到某个 frame 内
+          const frames = editorRef.current.getCurrentPageShapes().filter(s => s.type === 'frame');
+          const frame = frames.find(f => {
+            const b = editorRef.current.getShapePageBounds(f.id);
+            return b && pagePoint.x >= b.x && pagePoint.x <= b.x + b.w && pagePoint.y >= b.y && pagePoint.y <= b.y + b.h;
+          });
+          const frameBounds = frame ? editorRef.current.getShapePageBounds(frame.id) : null;
+
+          const { w, h } = computeDropSize({
+            natW, natH,
+            inFrame: !!frame,
+            frameBounds,
+            baseScale: 0.6,       // 自由放置的默认缩放比例
+            minSide: 80,
+            maxSide: 1200,
+            padding: 8
+          });
+
+          // 使用正确的方式创建图片形状，参考InsertImageButton的实现
+          const result = editorRef.current.createShape({
+            type: "image",
+            x: Math.round(pagePoint.x - w / 2),
+            y: Math.round(pagePoint.y - h / 2),
+            props: { w, h, assetId: normalizedAssetId }
+          });
+          
+          console.log('素材创建结果:', result);
+          
+          // 获取实际创建的形状ID
+          let shapeId;
+          if (typeof result === 'string') {
+            shapeId = result;
+          } else if (result && result.id) {
+            shapeId = result.id;
+          } else {
+            // 如果无法从返回值获取ID，尝试从最新创建的形状中获取
+            const currentShapes = editorRef.current.getCurrentPageShapes();
+            const imageShapes = currentShapes.filter(shape => shape.type === 'image');
+            if (imageShapes.length > 0) {
+              shapeId = imageShapes[imageShapes.length - 1].id;
+            }
+          }
+          
+          console.log('素材已添加到画布，形状ID:', shapeId);
+          
+          // 验证创建的形状
+          if (shapeId) {
+            setTimeout(() => {
+              const createdShape = editorRef.current.getShape(shapeId);
+              console.log('创建的图片形状详情:', createdShape);
+              console.log('形状的assetId:', createdShape?.props?.assetId);
+              
+              // 检查资产是否存在
+              const asset = editorRef.current.getAsset(normalizedAssetId);
+              console.log('关联的资产:', asset);
+            }, 100);
+          }
+        } catch (error) {
+          console.error('添加素材到画布失败:', error);
+        }
+      }
+      return;
+    }
     
     const files = Array.from(e.dataTransfer.files);
     console.log('文件列表:', files);
@@ -996,15 +1149,15 @@ export default function MainCanvas() {
   useEffect(() => {
     const handleGlobalDragOver = (e) => {
       console.log('全局拖拽进入:', e.target, e.dataTransfer.types);
-      if (e.dataTransfer.types.includes('Files')) {
+      if (e.dataTransfer.types.includes('Files') || e.dataTransfer.types.includes('application/asset-id')) {
         const files = Array.from(e.dataTransfer.files);
         const jsonFiles = files.filter(file => 
           file.type === 'application/json' || 
           file.name.toLowerCase().endsWith('.json')
         );
         
-        if (jsonFiles.length > 0) {
-          console.log('检测到JSON文件拖拽');
+        if (jsonFiles.length > 0 || e.dataTransfer.types.includes('application/asset-id')) {
+          console.log('检测到JSON文件或素材拖拽');
           e.preventDefault();
           e.stopPropagation();
           setDragOver(true);
@@ -1012,8 +1165,112 @@ export default function MainCanvas() {
       }
     };
 
-    const handleGlobalDrop = (e) => {
-      console.log('全局拖拽放下:', e.target, e.dataTransfer.files);
+    const handleGlobalDrop = async (e) => {
+      console.log('全局拖拽放下:', e.target, e.dataTransfer.files, e.dataTransfer.types);
+      
+      // 检查是否是素材拖拽
+      if (e.dataTransfer.types.includes('application/asset-id')) {
+        const assetId = e.dataTransfer.getData('application/asset-id');
+        const assetSrc = e.dataTransfer.getData('application/asset-src');
+        const assetName = e.dataTransfer.getData('application/asset-name');
+        
+        console.log('全局拖拽素材到画布:', { assetId, assetSrc, assetName });
+        
+        // 检查资产是否真的存在
+        if (editorRef.current) {
+          const asset = editorRef.current.getAsset(assetId);
+          console.log('全局拖拽原始资产检查:', asset);
+          
+          const normalizedAssetId = assetId.startsWith('asset:') ? assetId : `asset:${assetId}`;
+          const normalizedAsset = editorRef.current.getAsset(normalizedAssetId);
+          console.log('全局拖拽标准化资产检查:', normalizedAsset);
+        }
+        
+        if (assetId && editorRef.current) {
+          try {
+            // 使用更简单的方法：直接使用屏幕坐标转换为画布坐标
+            const screenPoint = { x: e.clientX, y: e.clientY };
+            const pagePoint = editorRef.current.screenToPage(screenPoint);
+            
+            console.log('全局拖拽坐标转换:', { 
+              screen: screenPoint, 
+              page: pagePoint,
+              camera: editorRef.current.getCamera()
+            });
+            
+            // 确保assetId有正确的前缀
+            const normalizedAssetId = assetId.startsWith('asset:') ? assetId : `asset:${assetId}`;
+            
+            // 获取图片原始尺寸
+            const { w: natW, h: natH } = await getNaturalSize(editorRef.current, normalizedAssetId, assetSrc);
+
+            // 判断是否丢到某个 frame 内
+            const frames = editorRef.current.getCurrentPageShapes().filter(s => s.type === 'frame');
+            const frame = frames.find(f => {
+              const b = editorRef.current.getShapePageBounds(f.id);
+              return b && pagePoint.x >= b.x && pagePoint.x <= b.x + b.w && pagePoint.y >= b.y && pagePoint.y <= b.y + b.h;
+            });
+            const frameBounds = frame ? editorRef.current.getShapePageBounds(frame.id) : null;
+
+            const { w, h } = computeDropSize({
+              natW, natH,
+              inFrame: !!frame,
+              frameBounds,
+              baseScale: 0.6,       // 自由放置的默认缩放比例
+              minSide: 80,
+              maxSide: 1200,
+              padding: 8
+            });
+
+            // 使用正确的方式创建图片形状，参考InsertImageButton的实现
+            const result = editorRef.current.createShape({
+              type: "image",
+              x: Math.round(pagePoint.x - w / 2),
+              y: Math.round(pagePoint.y - h / 2),
+              props: { w, h, assetId: normalizedAssetId }
+            });
+            
+            console.log('全局拖拽素材创建结果:', result);
+            
+            // 获取实际创建的形状ID
+            let shapeId;
+            if (typeof result === 'string') {
+              shapeId = result;
+            } else if (result && result.id) {
+              shapeId = result.id;
+            } else {
+              // 如果无法从返回值获取ID，尝试从最新创建的形状中获取
+              const currentShapes = editorRef.current.getCurrentPageShapes();
+              const imageShapes = currentShapes.filter(shape => shape.type === 'image');
+              if (imageShapes.length > 0) {
+                shapeId = imageShapes[imageShapes.length - 1].id;
+              }
+            }
+            
+            console.log('全局拖拽素材已添加到画布，形状ID:', shapeId);
+            
+            // 验证创建的形状
+            if (shapeId) {
+              setTimeout(() => {
+                const createdShape = editorRef.current.getShape(shapeId);
+                console.log('全局拖拽创建的图片形状详情:', createdShape);
+                console.log('形状的assetId:', createdShape?.props?.assetId);
+                
+                // 检查资产是否存在
+                const asset = editorRef.current.getAsset(normalizedAssetId);
+                console.log('关联的资产:', asset);
+              }, 100);
+            }
+          } catch (error) {
+            console.error('添加素材到画布失败:', error);
+          }
+        }
+        e.preventDefault();
+        e.stopPropagation();
+        setDragOver(false);
+        return;
+      }
+      
       if (e.dataTransfer.types.includes('Files')) {
         const files = Array.from(e.dataTransfer.files);
         const jsonFiles = files.filter(file => 
@@ -1227,7 +1484,7 @@ export default function MainCanvas() {
       
       {/* 保存状态指示器已移除 */}
 
-      {/* 拖拽JSON文件提示覆盖层 */}
+      {/* 拖拽提示覆盖层 */}
       {dragOver && (
         <div 
           style={{
@@ -1255,8 +1512,8 @@ export default function MainCanvas() {
             textAlign: 'center',
             boxShadow: '0 4px 12px rgba(0,0,0,0.3)'
           }}>
-            <h3 style={{ margin: '0 0 10px 0', color: '#007bff' }}>📄 拖拽画布文件</h3>
-            <p style={{ margin: 0, color: '#666' }}>将保存的JSON文件拖拽到这里加载画布</p>
+            <h3 style={{ margin: '0 0 10px 0', color: '#007bff' }}>🎨 拖拽素材到画布</h3>
+            <p style={{ margin: 0, color: '#666' }}>将素材拖拽到这里直接放置到画布上</p>
           </div>
         </div>
       )}
@@ -1267,8 +1524,10 @@ export default function MainCanvas() {
       {/* 右侧集成素材栏 */}
       {editorReady && (
         <ResizableSidebar 
-          width={sidebarWidth} 
+          width={sidebarCollapsed ? 0 : sidebarWidth} 
           onWidthChange={setSidebarWidth}
+          collapsed={sidebarCollapsed}
+          onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
         >
           <IntegratedAssetSidebar 
             editor={editorRef.current} 
@@ -1277,6 +1536,8 @@ export default function MainCanvas() {
             platform="TM"
             width={sidebarWidth}
             onReset={handleResetCanvas}
+            collapsed={sidebarCollapsed}
+            onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
           />
         </ResizableSidebar>
       )}
