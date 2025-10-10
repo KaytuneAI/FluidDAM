@@ -459,6 +459,7 @@ export default function LoadCanvasButton({ editor, setIsLoading }) {
         if (element.type === 'textbox') {
           // 创建文本框
           const textbox = element.data;
+          console.log('🔤 开始处理文本框:', textbox.name, '数据:', textbox);
           
           // 检查是否有真正的边框或填充
           const hasBorder = textbox.border && textbox.border.style !== 'none';
@@ -498,6 +499,29 @@ export default function LoadCanvasButton({ editor, setIsLoading }) {
           const processedText = textbox.text;
           
           // 使用TLDraw官方文档的正确语法，通过props.w设置固定宽度
+          // 从 JSON 中拿样式（字段名按照你导出的实际结构做兜底）
+          const excelFontName = textbox.style?.fontName || textbox.fontName || (textbox.font && textbox.font.name);
+          const excelFontSizePt = textbox.style?.fontSize || textbox.fontSize || (textbox.font && textbox.font.size);
+          const excelColorHex = textbox.style?.color || (textbox.font && textbox.font.color) || textbox.color;
+          const excelHAlign = textbox.style?.hAlign || textbox.hAlign || textbox.align || 'left';
+
+          const tlFont = mapExcelFontToTL(excelFontName);
+          const tlSize = mapPtToTLSize(excelFontSizePt);
+          const tlAlign = mapHAlignToTL(excelHAlign);
+          const tlColor = normalizeTextColor(excelColorHex);
+
+          // 调试信息：显示字体映射结果
+          console.log('🔤 文本框字体映射详情:');
+          console.log('  名称:', textbox.name);
+          console.log('  原始字体:', excelFontName || '未设置');
+          console.log('  原始字号:', excelFontSizePt || '未设置');
+          console.log('  原始颜色:', excelColorHex || '未设置');
+          console.log('  原始对齐:', excelHAlign || '未设置');
+          console.log('  映射字体:', tlFont);
+          console.log('  映射字号:', tlSize);
+          console.log('  映射对齐:', tlAlign);
+          console.log('  映射颜色:', tlColor);
+
           const textShape = {
             type: 'text',
             x: textbox.left + padding,
@@ -506,10 +530,21 @@ export default function LoadCanvasButton({ editor, setIsLoading }) {
               richText: toRichText(processedText), // 使用toRichText函数
               w: textWidth, // 设置固定宽度，让文本自动换行
               autoSize: false, // 禁用自动调整大小，使用固定宽度
+              font: tlFont, // ← 应用字体族
+              size: tlSize, // ← 应用字号档位
+              color: tlColor // ← 颜色（可选）
+              // 注意：TLDraw v3的text形状不支持align属性
             }
           };
           
-          // 添加调试信息
+          // 调试信息：显示实际创建的文本形状
+          console.log('✅ 创建文本形状:');
+          console.log('  名称:', textbox.name);
+          console.log('  文本:', processedText.substring(0, 20) + '...');
+          console.log('  字体:', textShape.props.font);
+          console.log('  字号:', textShape.props.size);
+          console.log('  颜色:', textShape.props.color);
+          
           editor.createShape(textShape);
           // 文本框创建完成
           
@@ -620,6 +655,25 @@ export default function LoadCanvasButton({ editor, setIsLoading }) {
           
           // 如果有内容，添加文本
           if (cell.v && cell.v.trim()) {
+            console.log('📝 开始处理单元格文本:', cell.v, '数据:', cell);
+            // 如果 JSON 里也记录了 cell 的字体与字号，就取；没有则给合理默认
+            const cellFontName = cell.fontName || (cell.font && cell.font.name) || 'Microsoft YaHei';
+            const cellFontSize = cell.fontSize || (cell.font && cell.font.size) || 11;
+            const cellColorHex = (cell.font && cell.font.color) || '#000000';
+            const cellAlign = cell.hAlign || cell.align || 'left';
+
+            // 调试信息：显示单元格字体映射结果
+            console.log('📝 单元格字体映射详情:');
+            console.log('  内容:', cell.v);
+            console.log('  原始字体:', cellFontName || '未设置');
+            console.log('  原始字号:', cellFontSize || '未设置');
+            console.log('  原始颜色:', cellColorHex || '未设置');
+            console.log('  原始对齐:', cellAlign || '未设置');
+            console.log('  映射字体:', mapExcelFontToTL(cellFontName));
+            console.log('  映射字号:', mapPtToTLSize(cellFontSize));
+            console.log('  映射对齐:', mapHAlignToTL(cellAlign));
+            console.log('  映射颜色:', normalizeTextColor(cellColorHex));
+
             const textShape = {
               type: 'text',
               x: x + 2, // 稍微偏移，避免与边框重叠
@@ -627,9 +681,11 @@ export default function LoadCanvasButton({ editor, setIsLoading }) {
               props: {
                 w: Math.max(w - 4, 10), // 确保最小宽度
                 richText: toRichText(cell.v),
-                size: 's',
-                color: 'black',
-                font: 'draw'
+                autoSize: false,
+                font: mapExcelFontToTL(cellFontName),
+                size: mapPtToTLSize(cellFontSize),
+                color: normalizeTextColor(cellColorHex)
+                // 注意：TLDraw v3的text形状不支持align属性
               }
             };
             
@@ -645,6 +701,7 @@ export default function LoadCanvasButton({ editor, setIsLoading }) {
     
     console.log('布局数据处理完成');
   };
+
 
   const loadCanvas = async (file) => {
     if (!editor) {
@@ -960,6 +1017,7 @@ export default function LoadCanvasButton({ editor, setIsLoading }) {
         >
           <img src="/src/assets/load_canvas.png" alt="加载画布" style={{width: 32, height: 32}} />
         </button>
+        
 
       {/* 工作表选择对话框 */}
       {showSheetDialog && currentFile && (
@@ -1008,3 +1066,94 @@ const mapBorderStyle = (style) => {
     default: return 'solid';
   }
 };
+
+// 将 Excel 字体名粗略映射到 TLDraw 允许的四类字体：'sans' | 'serif' | 'mono' | 'draw'
+function mapExcelFontToTL(fontName = '') {
+  const f = (fontName || '').toLowerCase();
+  if (!f) return 'sans';
+  // 常见西文字体
+  if (f.includes('consola') || f.includes('mono') || f.includes('courier') || f.includes('等宽')) return 'mono';
+  if (f.includes('times') || f.includes('georgia') || f.includes('garamond') || f.includes('serif')) return 'serif';
+  // 常见无衬线（Windows/Office/中文环境）
+  if (f.includes('arial') || f.includes('helvetica') || f.includes('calibri') || f.includes('segoe') ||
+      f.includes('microsoft yahei') || f.includes('yahei') || f.includes('微软雅黑') ||
+      f.includes('heiti') || f.includes('黑体') || f.includes('deng') || f.includes('等线') ||
+      f.includes('苹方') || f.includes('pingfang')) return 'sans';
+  // 其它中文字体（宋体/仿宋/楷体）大多更接近 serif 的视觉
+  if (f.includes('song') || f.includes('宋') || f.includes('fang') || f.includes('仿宋') ||
+      f.includes('kai') || f.includes('楷')) return 'serif';
+  // 默认无衬线
+  return 'sans';
+}
+
+// 将 Excel pt 映射为 TLDraw 的离散字号档位（'s' | 'm' | 'l' | 'xl'）
+// 说明：TLDraw 的 text.size 只支持这四个值，并非自由 pt；用分段近似即可。
+// 调整：整体再变小一轮，让16-18pt也落到m档
+function mapPtToTLSize(pt = 11) {
+  const p = Number(pt) || 11;
+  if (p <= 8) return 's';   // 极小号：≤8pt → s
+  if (p <= 12) return 's';  // 小号：9-12pt → s
+  if (p <= 18) return 'm';  // 中号：13-18pt → m (扩大范围)
+  if (p <= 24) return 'l';  // 大号：19-24pt → l
+  return 'xl';              // 超大号：25pt+ → xl
+}
+
+// 水平对齐：Excel -> TLDraw
+function mapHAlignToTL(align = 'left') {
+  const a = (align || '').toLowerCase();
+  if (a.includes('center')) return 'middle';
+  if (a.includes('right')) return 'end';
+  return 'start'; // left
+}
+
+// 文本颜色：将十六进制颜色映射到TLDraw支持的颜色名称
+function normalizeTextColor(hex) {
+  if (typeof hex !== 'string' || !/^#([0-9a-f]{6})$/i.test(hex)) {
+    return 'black'; // 默认黑色
+  }
+  
+  // 移除#号并转换为小写
+  const hexColor = hex.replace('#', '').toLowerCase();
+  
+  // 常见颜色映射到TLDraw支持的颜色
+  const colorMap = {
+    '000000': 'black',
+    'ffffff': 'white',
+    'ff0000': 'red',
+    '00ff00': 'green',
+    '0000ff': 'blue',
+    'ffff00': 'yellow',
+    'ffa500': 'orange',
+    '800080': 'violet',
+    'ffc0cb': 'light-red',
+    '90ee90': 'light-green',
+    'add8e6': 'light-blue',
+    'dda0dd': 'light-violet',
+    '808080': 'grey'
+  };
+  
+  // 精确匹配
+  if (colorMap[hexColor]) {
+    return colorMap[hexColor];
+  }
+  
+  // 根据颜色值进行近似匹配
+  const r = parseInt(hexColor.substr(0, 2), 16);
+  const g = parseInt(hexColor.substr(2, 2), 16);
+  const b = parseInt(hexColor.substr(4, 2), 16);
+  
+  // 计算亮度
+  const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+  
+  if (brightness < 50) return 'black';
+  if (brightness > 200) return 'white';
+  
+  // 根据RGB值判断主要颜色
+  if (r > g && r > b) return 'red';
+  if (g > r && g > b) return 'green';
+  if (b > r && b > g) return 'blue';
+  if (r > 200 && g > 200 && b < 100) return 'yellow';
+  if (r > 200 && g > 100 && b < 100) return 'orange';
+  
+  return 'black'; // 默认返回黑色
+}

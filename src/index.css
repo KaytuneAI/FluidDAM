@@ -13,8 +13,10 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* 全局强制使用正式字体，覆盖所有可能的字体设置 */
-*, *::before, *::after {
+/* 全局强制使用正式字体，覆盖所有可能的字体设置，但排除TLDraw容器 */
+*:not(.tl-container *):not(.tl-container):not(.tl-theme__light *):not(.tl-theme__light):not(.tl-theme__dark *):not(.tl-theme__dark), 
+*:not(.tl-container *):not(.tl-container):not(.tl-theme__light *):not(.tl-theme__light):not(.tl-theme__dark *):not(.tl-theme__dark)::before, 
+*:not(.tl-container *):not(.tl-container):not(.tl-theme__light *):not(.tl-theme__light):not(.tl-theme__dark *):not(.tl-theme__dark)::after {
   font-family: Arial, Helvetica, "Microsoft YaHei", "微软雅黑", "PingFang SC", "Hiragino Sans GB", "WenQuanYi Micro Hei", sans-serif !important;
   font-style: normal !important;
   font-weight: normal !important;
@@ -60,6 +62,38 @@ button:hover {
 button:focus,
 button:focus-visible {
   outline: 4px auto -webkit-focus-ring-color;
+}
+
+/* 恢复 tldraw 的文本主题变量，避免被全局样式吞没 */
+.tl-container, .tl-theme__light, .tl-theme__dark {
+  /* 四类字体家族（与 text.props.font 对齐） */
+  --tl-font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", "Liberation Sans", "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+  --tl-font-serif: ui-serif, Georgia, "Times New Roman", Times, serif;
+  --tl-font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  --tl-font-draw: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+  /* 字号档位（TLDraw内部使用）- 调整为更小的尺寸 */
+  --tl-text-size-xs: 8px;
+  --tl-text-size-s: 10px;
+  --tl-text-size-m: 12px;
+  --tl-text-size-l: 14px;
+  --tl-text-size-xl: 18px;
+  --tl-text-size-xxl: 24px;
+}
+
+/* 防止外部 reset 把 TLDraw 子元素统一设置 font-size / font-family */
+.tl-container * {
+  font-size: unset;
+  font-family: unset;
+}
+
+/* === 全体文字再缩小 30% === */
+.tl-container, .tl-theme__light, .tl-theme__dark {
+  --tl-text-size-xs: calc(var(--tl-text-size-xs) * 0.7);
+  --tl-text-size-s: calc(var(--tl-text-size-s) * 0.7);
+  --tl-text-size-m: calc(var(--tl-text-size-m) * 0.7);
+  --tl-text-size-l: calc(var(--tl-text-size-l) * 0.7);
+  --tl-text-size-xl: calc(var(--tl-text-size-xl) * 0.7);
+  --tl-text-size-xxl: calc(var(--tl-text-size-xxl) * 0.7);
 }
 
 @media (prefers-color-scheme: light) {
