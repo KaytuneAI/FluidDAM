@@ -353,14 +353,17 @@ Private Function CellsToJsonSparse(ByVal ws As Worksheet, ByRef nonEmptyCount As
             If Not IsEmpty(v) And CStr(v) <> "" Then
                 If nonEmptyCount > 0 Then sb = sb & ","
                 
-                ' 构建单元格信息，包括位置和尺寸
+                ' 构建单元格信息，包括位置、尺寸、对齐方式和底色
                 sb = sb & "{""r"":" & CNum(ur.row + r - 1) & _
                           ",""c"":" & CNum(ur.Column + c - 1) & _
                           ",""x"":" & CNumD(cell.Left * pt2px) & _
                           ",""y"":" & CNumD(cell.Top * pt2px) & _
                           ",""w"":" & CNumD(cell.Width * pt2px) & _
                           ",""h"":" & CNumD(cell.Height * pt2px) & _
-                          ",""v"":""" & EscapeJson(CStr(v)) & """}"
+                          ",""v"":""" & EscapeJson(CStr(v)) & """," & _
+                          """hAlign"":""" & GetCellHAlign(cell) & """," & _
+                          """vAlign"":""" & GetCellVAlign(cell) & """," & _
+                          """fillColor"":""" & GetCellFillColor(cell) & """}"
                 
                 nonEmptyCount = nonEmptyCount + 1
             End If
@@ -480,6 +483,47 @@ Private Function PtToPxFactor() As Double
 End Function
 
 ' ---- font & align helpers ----
+' 获取单元格水平对齐方式
+Private Function GetCellHAlign(ByVal cell As Range) As String
+    On Error Resume Next
+    Select Case cell.HorizontalAlignment
+        Case xlLeft:      GetCellHAlign = "left"
+        Case xlCenter:    GetCellHAlign = "center"
+        Case xlRight:     GetCellHAlign = "right"
+        Case xlJustify:   GetCellHAlign = "justify"
+        Case xlDistributed: GetCellHAlign = "distributed"
+        Case xlGeneral:   GetCellHAlign = "general"
+        Case Else:        GetCellHAlign = "general"
+    End Select
+    On Error GoTo 0
+End Function
+
+' 获取单元格垂直对齐方式
+Private Function GetCellVAlign(ByVal cell As Range) As String
+    On Error Resume Next
+    Select Case cell.VerticalAlignment
+        Case xlTop:       GetCellVAlign = "top"
+        Case xlCenter:    GetCellVAlign = "middle"
+        Case xlBottom:    GetCellVAlign = "bottom"
+        Case xlJustify:   GetCellVAlign = "justify"
+        Case xlDistributed: GetCellVAlign = "distributed"
+        Case Else:        GetCellVAlign = "bottom"
+    End Select
+    On Error GoTo 0
+End Function
+
+' 获取单元格填充颜色
+Private Function GetCellFillColor(ByVal cell As Range) As String
+    On Error Resume Next
+    ' 检查单元格是否有填充颜色
+    If cell.Interior.ColorIndex = xlNone Then
+        GetCellFillColor = "#FFFFFF"  ' 无填充时返回白色
+    Else
+        GetCellFillColor = RGBToHex(cell.Interior.Color)
+    End If
+    On Error GoTo 0
+End Function
+
 Private Function FontNameOfShape(shp As Shape) As String
     On Error Resume Next
     FontNameOfShape = shp.TextFrame2.TextRange.Font.Name

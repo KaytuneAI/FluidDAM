@@ -58,8 +58,38 @@
 }
 ```
 
+## 单元格对齐功能
+
+### 支持的对齐方式
+- **水平对齐**：left, center, right, justify, distributed, general
+- **垂直对齐**：top, middle, bottom, justify, distributed
+
+### JSON格式
+单元格对齐信息在JSON中的结构：
+```json
+{
+  "r": 1,
+  "c": 1,
+  "x": 0,
+  "y": 0,
+  "w": 100,
+  "h": 20,
+  "v": "文本内容",
+  "hAlign": "center",
+  "vAlign": "middle"
+}
+```
+
+### 显示效果
+- 在TLDraw画布中，文本会根据Excel中的对齐方式自动调整位置
+- 水平居中：文本在单元格中水平居中显示
+- 垂直居中：文本在单元格中垂直居中显示
+- 右对齐：文本靠右显示
+- 底部对齐：文本靠底部显示
+
 ## 注意事项
 - 富媒体格式信息会按字符位置记录格式变化
 - 每个格式段包含起始位置(start)和结束位置(end)
 - 支持的格式属性：fontName, fontSize, bold, italic, color
 - 如果富媒体格式解析失败，会回退到普通文本格式
+- 单元格对齐通过调整文本的x,y坐标来实现，因为TLDraw v3不支持align属性

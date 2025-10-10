@@ -88,8 +88,8 @@ button:focus-visible {
 
 /* === 全体文字再缩小 30% === */
 .tl-container, .tl-theme__light, .tl-theme__dark {
-  --tl-text-size-xs: calc(var(--tl-text-size-xs) * 0.7);
-  --tl-text-size-s: calc(var(--tl-text-size-s) * 0.7);
+  --tl-text-size-xs: calc(var(--tl-text-size-xs) * 0.6);
+  --tl-text-size-s: calc(var(--tl-text-size-s) * 0.6);
   --tl-text-size-m: calc(var(--tl-text-size-m) * 0.6);
   --tl-text-size-l: calc(var(--tl-text-size-l) * 0.6);
   --tl-text-size-xl: calc(var(--tl-text-size-xl) * 0.6);

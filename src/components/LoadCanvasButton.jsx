@@ -466,7 +466,73 @@ export default function LoadCanvasButton({ editor, setIsLoading }) {
       // 图片形状创建完成
     }
 
-    // 4. 按Z-order顺序创建所有元素
+    // 4. 首先创建所有单元格背景色（最底层，Z-order = -1000）
+    if (layoutData.sheet && layoutData.sheet.cells) {
+      console.log('开始创建单元格背景色（最底层）:', layoutData.sheet.cells.length);
+      
+      for (const cell of layoutData.sheet.cells) {
+        try {
+          // 验证并设置默认值
+          const x = typeof cell.x === 'number' ? cell.x : 0;
+          const y = typeof cell.y === 'number' ? cell.y : 0;
+          const w = typeof cell.w === 'number' && cell.w > 0 ? cell.w : 50; // 默认宽度50
+          const h = typeof cell.h === 'number' && cell.h > 0 ? cell.h : 20; // 默认高度20
+          
+          // 使用VBA提供的精确坐标和尺寸
+          const cellFillColor = mapCellFillColor(cell.fillColor);
+          
+          // 调试信息：显示单元格颜色映射结果
+          if (cell.fillColor && cell.fillColor !== '#FFFFFF') {
+            console.log('🎨 单元格颜色映射:', {
+              原始颜色: cell.fillColor,
+              映射颜色: cellFillColor,
+              填充模式: cellFillColor === 'none' ? 'none' : 'solid'
+            });
+          }
+          
+          // 创建单元格背景色（最底层，Z-order = -1000）
+          if (cellFillColor !== 'none') {
+            const cellBackgroundShape = {
+              type: 'geo',
+              x: x, // 使用验证后的X坐标
+              y: y, // 使用验证后的Y坐标
+              props: {
+                geo: 'rectangle',
+                w: w, // 使用验证后的宽度
+                h: h, // 使用验证后的高度
+                fill: 'solid',
+                color: cellFillColor, // 使用映射后的颜色
+                dash: 'solid',
+                size: 's' // 细线条
+              }
+            };
+            editor.createShape(cellBackgroundShape);
+          }
+          
+          // 创建单元格边框（透明填充，只显示边框，Z-order = -999）
+          const cellBorderShape = {
+            type: 'geo',
+            x: x, // 使用验证后的X坐标
+            y: y, // 使用验证后的Y坐标
+            props: {
+              geo: 'rectangle',
+              w: w, // 使用验证后的宽度
+              h: h, // 使用验证后的高度
+              fill: 'none',
+              color: 'grey', // 边框颜色固定为灰色
+              dash: 'solid',
+              size: 's' // 细线条
+            }
+          };
+          editor.createShape(cellBorderShape);
+          
+        } catch (error) {
+          console.warn('创建单元格背景失败:', cell, error);
+        }
+      }
+    }
+    
+    // 5. 按Z-order顺序创建图片和文本框（保持原有Z-order）
     
     for (const element of sortedElements) {
       try {
@@ -656,9 +722,9 @@ export default function LoadCanvasButton({ editor, setIsLoading }) {
       }
     }
     
-    // 5. 重构单元格数据 - 使用VBA提供的精确坐标
+    // 6. 最后创建单元格文本（按Z-order顺序，但确保在单元格底色之上）
     if (layoutData.sheet && layoutData.sheet.cells) {
-      console.log('开始重构单元格:', layoutData.sheet.cells.length);
+      console.log('开始创建单元格文本（按Z-order顺序）:', layoutData.sheet.cells.length);
       
       for (const cell of layoutData.sheet.cells) {
         try {
@@ -668,25 +734,6 @@ export default function LoadCanvasButton({ editor, setIsLoading }) {
           const w = typeof cell.w === 'number' && cell.w > 0 ? cell.w : 50; // 默认宽度50
           const h = typeof cell.h === 'number' && cell.h > 0 ? cell.h : 20; // 默认高度20
           
-          // 使用VBA提供的精确坐标和尺寸
-          const cellShape = {
-            type: 'geo',
-            x: x, // 使用验证后的X坐标
-            y: y, // 使用验证后的Y坐标
-            props: {
-              geo: 'rectangle',
-              w: w, // 使用验证后的宽度
-              h: h, // 使用验证后的高度
-              fill: 'none',
-              color: 'grey', // 使用tldraw v3支持的颜色名称
-              dash: 'solid',
-              size: 's' // 细线条
-            }
-          };
-          
-          // 创建单元格边框
-          editor.createShape(cellShape);
-          
           // 如果有内容，添加文本
           if (cell.v && cell.v.trim()) {
             console.log('📝 开始处理单元格文本:', cell.v, '数据:', cell);
@@ -694,7 +741,8 @@ export default function LoadCanvasButton({ editor, setIsLoading }) {
             const cellFontName = cell.fontName || (cell.font && cell.font.name) || 'Microsoft YaHei';
             const cellFontSize = cell.fontSize || (cell.font && cell.font.size) || 11;
             const cellColorHex = (cell.font && cell.font.color) || '#000000';
-            const cellAlign = cell.hAlign || cell.align || 'left';
+            const cellHAlign = cell.hAlign || cell.align || 'left';
+            const cellVAlign = cell.vAlign || 'bottom';
 
             // 调试信息：显示单元格字体映射结果
             console.log('📝 单元格字体映射详情:');
@@ -702,16 +750,32 @@ export default function LoadCanvasButton({ editor, setIsLoading }) {
             console.log('  原始字体:', cellFontName || '未设置');
             console.log('  原始字号:', cellFontSize || '未设置');
             console.log('  原始颜色:', cellColorHex || '未设置');
-            console.log('  原始对齐:', cellAlign || '未设置');
+            console.log('  水平对齐:', cellHAlign || '未设置');
+            console.log('  垂直对齐:', cellVAlign || '未设置');
             console.log('  映射字体:', mapExcelFontToTL(cellFontName));
             console.log('  映射字号:', mapPtToTLSize(cellFontSize));
-            console.log('  映射对齐:', mapHAlignToTL(cellAlign));
             console.log('  映射颜色:', normalizeTextColor(cellColorHex));
+
+            // 根据垂直对齐计算Y坐标
+            let textY = y + 2; // 默认顶部对齐
+            if (cellVAlign === 'middle') {
+              textY = y + (h / 2) - 6; // 垂直居中，减去字体高度的一半
+            } else if (cellVAlign === 'bottom') {
+              textY = y + h - 14; // 底部对齐，减去字体高度
+            }
+            
+            // 根据水平对齐计算X坐标
+            let textX = x + 2; // 默认左对齐
+            if (cellHAlign === 'center') {
+              textX = x + (w / 2) - (cell.v.length * 4); // 水平居中，粗略估算
+            } else if (cellHAlign === 'right') {
+              textX = x + w - (cell.v.length * 8) - 2; // 右对齐，粗略估算
+            }
 
             const textShape = {
               type: 'text',
-              x: x + 2, // 稍微偏移，避免与边框重叠
-              y: y + 2,
+              x: textX,
+              y: textY,
               props: {
                 w: Math.max(w - 4, 10), // 确保最小宽度
                 richText: toRichText(cell.v),
@@ -719,16 +783,16 @@ export default function LoadCanvasButton({ editor, setIsLoading }) {
                 font: mapExcelFontToTL(cellFontName),
                 size: mapPtToTLSize(cellFontSize),
                 color: normalizeTextColor(cellColorHex)
-                // 注意：TLDraw v3的text形状不支持align属性
+                // 注意：TLDraw v3的text形状不支持align属性，所以通过调整x,y坐标来实现对齐
               }
             };
             
             editor.createShape(textShape);
           }
           
-          // 单元格创建完成
+          // 单元格文本创建完成
         } catch (error) {
-          console.warn('创建单元格失败:', cell, error);
+          console.warn('创建单元格文本失败:', cell, error);
         }
       }
     }
@@ -1190,4 +1254,66 @@ function normalizeTextColor(hex) {
   if (r > 200 && g > 100 && b < 100) return 'orange';
   
   return 'black'; // 默认返回黑色
+}
+
+// 单元格填充颜色映射：将十六进制颜色映射到TLDraw支持的颜色名称
+function mapCellFillColor(hex) {
+  if (typeof hex !== 'string' || !/^#([0-9a-f]{6})$/i.test(hex)) {
+    return 'none'; // 默认无填充
+  }
+  
+  // 移除#号并转换为小写
+  const hexColor = hex.replace('#', '').toLowerCase();
+  
+  // 如果是白色或接近白色，返回无填充
+  if (hexColor === 'ffffff' || hexColor === 'fffffe' || hexColor === 'fffffd') {
+    return 'none';
+  }
+  
+  // 常见颜色映射到TLDraw支持的颜色
+  const colorMap = {
+    '000000': 'black',
+    'ff0000': 'red',
+    '00ff00': 'green',
+    '0000ff': 'blue',
+    'ffff00': 'yellow',
+    'ffa500': 'orange',
+    '800080': 'violet',
+    'ffc0cb': 'light-red',
+    '90ee90': 'light-green',
+    'add8e6': 'light-blue',
+    'dda0dd': 'light-violet',
+    '808080': 'grey',
+    'c0c0c0': 'grey',
+    'd3d3d3': 'grey',
+    'f0f0f0': 'grey'
+  };
+  
+  // 精确匹配
+  if (colorMap[hexColor]) {
+    return colorMap[hexColor];
+  }
+  
+  // 根据颜色值进行近似匹配
+  const r = parseInt(hexColor.substr(0, 2), 16);
+  const g = parseInt(hexColor.substr(2, 2), 16);
+  const b = parseInt(hexColor.substr(4, 2), 16);
+  
+  // 计算亮度
+  const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+  
+  // 如果太亮（接近白色），返回无填充
+  if (brightness > 240) return 'none';
+  
+  // 根据RGB值判断主要颜色
+  if (r > g && r > b) return 'red';
+  if (g > r && g > b) return 'green';
+  if (b > r && b > g) return 'blue';
+  if (r > 200 && g > 200 && b < 100) return 'yellow';
+  if (r > 200 && g > 100 && b < 100) return 'orange';
+  if (r > 100 && g < 100 && b > 100) return 'violet';
+  if (brightness < 100) return 'black';
+  if (brightness > 150) return 'grey';
+  
+  return 'grey'; // 默认返回灰色
 }
