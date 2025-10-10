@@ -146,15 +146,25 @@ app.get('/api/get-image-data', (req, res) => {
     const databasePath = path.join(__dirname, 'public', 'images-database.json')
     
     if (fs.existsSync(databasePath)) {
-      const fileContent = fs.readFileSync(databasePath, 'utf8')
+      const fileContent = fs.readFileSync(databasePath, 'utf8').trim()
+      
+      // 检查文件是否为空
+      if (!fileContent) {
+        console.log('images-database.json 文件为空，返回默认数据')
+        res.json({ images: [], lastUpdated: "", totalImages: 0 })
+        return
+      }
+      
       const database = JSON.parse(fileContent)
       res.json(database)
     } else {
+      console.log('images-database.json 文件不存在，返回默认数据')
       res.json({ images: [], lastUpdated: "", totalImages: 0 })
     }
   } catch (error) {
     console.error('读取数据时出错:', error)
-    res.status(500).json({ success: false, message: '读取失败', error: error.message })
+    // 如果JSON解析失败，返回默认数据而不是错误
+    res.json({ images: [], lastUpdated: "", totalImages: 0 })
   }
 })
 
