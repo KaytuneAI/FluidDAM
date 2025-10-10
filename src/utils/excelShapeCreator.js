@@ -16,20 +16,45 @@ export class ExcelShapeCreator {
     this.dependencies = dependencies;
   }
 
-  // === ADD: contain-fit 计算函数 ===
+  // 统一的 contain-fit：等比包含 + 居中；无向上放大；对极端比例做微补偿
   computeContainFit(x, y, wCell, hCell, wNat, hNat, paddingPx = 2) {
+    // --- 1) 动态 padding：避免紧贴容器边缘引发"被切一刀"的错觉 ---
+    const containerArea = wCell * hCell;
+    const basePadding = Math.max(2, Math.min(8, Math.sqrt(containerArea) / 50));
     const ratio = wNat / hNat;
-    const extra = (ratio > 3 || ratio < 1/3) ? 2 : 0; // 极端长宽比多留边
-    const pad = Math.max(0, paddingPx + extra);
+    const isTooWide = ratio > 3;       // 超宽（例如 3:1 以上）
+    const isTooTall = ratio < 1 / 3;   // 超高（例如 1:3 以上）
+    const aspectFactor = (isTooWide || isTooTall) ? 1.4 : 1.0;
+    const pad = Math.round(Math.max(paddingPx, basePadding * aspectFactor));
 
     const innerW = Math.max(0, wCell - pad * 2);
     const innerH = Math.max(0, hCell - pad * 2);
 
-    const s = Math.min(innerW / wNat, innerH / hNat); // contain
-    const wImg = Math.max(1, Math.floor(wNat * s));   // w/h 用 floor，防 1px 溢出
-    const hImg = Math.max(1, Math.floor(hNat * s));
-    const xImg = Math.round(x + (wCell - wImg) / 2);  // x/y 用 round，防亚像素锯齿
-    const yImg = Math.round(y + (hCell - hImg) / 2);
+    // --- 2) 计算 contain 缩放：禁止任何"额外放大" ---
+    // 重要：不要再乘以 renderSafetyMargin (>1)；那会把图像变成 cover 效果！
+    const s = Math.min(innerW / wNat, innerH / hNat);
+
+    // --- 3) 尺寸取整策略：w/h 用 floor，避免 1px 溢出导致被 mask 裁切 ---
+    let wImg = Math.max(1, Math.floor(wNat * s));
+    let hImg = Math.max(1, Math.floor(hNat * s));
+
+    // --- 4) 极端比例微补偿（只做"减小"，绝不放大），防止边缘抗锯齿误差 ---
+    if (isTooWide) {
+      wImg = Math.max(1, wImg - Math.max(1, Math.round(wCell * 0.002))); // 减 0.2% 宽
+    }
+    if (isTooTall) {
+      hImg = Math.max(1, hImg - Math.max(1, Math.round(hCell * 0.002))); // 减 0.2% 高
+    }
+
+    // --- 5) 居中定位：x/y 用 round（防亚像素锯齿）；并确保不为负 ---
+    const xImg = Math.max(x, Math.round(x + (wCell - wImg) / 2));
+    const yImg = Math.max(y, Math.round(y + (hCell - hImg) / 2));
+
+    // 调试输出（可保留，便于定位问题）
+    console.log(
+      `🧩 contain-fit: 容器${wCell}×${hCell}, 原图${wNat}×${hNat}, 比例=${ratio.toFixed(3)}, pad=${pad}, ` +
+      `绘制=${wImg}×${hImg}, 位置=(${xImg},${yImg})`
+    );
 
     return { x: xImg, y: yImg, w: wImg, h: hImg };
   }
