@@ -758,6 +758,8 @@ export default function LoadCanvasButton({ editor, setIsLoading }) {
             console.log('  原始水平对齐:', cell.hAlign || '未设置');
             console.log('  处理后水平对齐:', cellHAlign || '未设置');
             console.log('  垂直对齐:', cellVAlign || '未设置');
+            console.log('  是否合并单元格:', cell.isMerged || false);
+            console.log('  合并区域:', cell.mergeArea || '无');
             console.log('  映射字体:', mapExcelFontToTL(cellFontName));
             console.log('  映射字号:', mapPtToTLSize(cellFontSize));
             console.log('  映射颜色:', normalizeTextColor(cellColorHex));

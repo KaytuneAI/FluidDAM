@@ -346,27 +346,46 @@ Private Function CellsToJsonSparse(ByVal ws As Worksheet, ByRef nonEmptyCount As
         For c = 1 To ur.Columns.Count
             Dim cell As Range
             Set cell = ur.Cells(r, c)
+            
+            ' 获取合并单元格的代表单元格
+            Dim representativeCell As Range
+            Set representativeCell = GetRepresentativeCell(cell)
+            
+            ' 如果当前单元格不是合并区域的代表单元格，跳过
+            If Not (cell.Row = representativeCell.Row And cell.Column = representativeCell.Column) Then
+                GoTo NextCell
+            End If
+            
             Dim v As Variant
-            v = cell.Value2
+            v = representativeCell.Value2
             
             ' 只处理有内容的单元格
             If Not IsEmpty(v) And CStr(v) <> "" Then
                 If nonEmptyCount > 0 Then sb = sb & ","
                 
+                ' 获取合并区域的尺寸信息
+                Dim mergeArea As Range
+                Set mergeArea = representativeCell.MergeArea
+                
                 ' 构建单元格信息，包括位置、尺寸、对齐方式和底色
+                ' 对于合并单元格，使用合并区域的尺寸
                 sb = sb & "{""r"":" & CNum(ur.row + r - 1) & _
                           ",""c"":" & CNum(ur.Column + c - 1) & _
-                          ",""x"":" & CNumD(cell.Left * pt2px) & _
-                          ",""y"":" & CNumD(cell.Top * pt2px) & _
-                          ",""w"":" & CNumD(cell.Width * pt2px) & _
-                          ",""h"":" & CNumD(cell.Height * pt2px) & _
+                          ",""x"":" & CNumD(mergeArea.Left * pt2px) & _
+                          ",""y"":" & CNumD(mergeArea.Top * pt2px) & _
+                          ",""w"":" & CNumD(mergeArea.Width * pt2px) & _
+                          ",""h"":" & CNumD(mergeArea.Height * pt2px) & _
                           ",""v"":""" & EscapeJson(CStr(v)) & """," & _
-                          """hAlign"":""" & GetCellHAlign(cell) & """," & _
-                          """vAlign"":""" & GetCellVAlign(cell) & """," & _
-                          """fillColor"":""" & GetCellFillColor(cell) & """}"
+                          """hAlign"":""" & GetCellHAlign(representativeCell) & """," & _
+                          """vAlign"":""" & GetCellVAlign(representativeCell) & """," & _
+                          """fillColor"":""" & GetCellFillColor(representativeCell) & """," & _
+                          """isMerged"":" & IIf(representativeCell.MergeCells, "true", "false") & "," & _
+                          """mergeArea"":""" & mergeArea.Address & """}"
                 
                 nonEmptyCount = nonEmptyCount + 1
             End If
+            
+NextCell:
         Next c
     Next r
 
