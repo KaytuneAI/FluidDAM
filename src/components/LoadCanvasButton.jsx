@@ -741,8 +741,13 @@ export default function LoadCanvasButton({ editor, setIsLoading }) {
             const cellFontName = cell.fontName || (cell.font && cell.font.name) || 'Microsoft YaHei';
             const cellFontSize = cell.fontSize || (cell.font && cell.font.size) || 11;
             const cellColorHex = (cell.font && cell.font.color) || '#000000';
-            const cellHAlign = cell.hAlign || cell.align || 'left';
-            const cellVAlign = cell.vAlign || 'bottom';
+            let cellHAlign = cell.hAlign || cell.align || 'left';
+            const cellVAlign = cell.vAlign || 'top';
+            
+            // 处理Excel的'general'对齐方式
+            if (cellHAlign === 'general') {
+              cellHAlign = 'left'; // general通常当作左对齐处理
+            }
 
             // 调试信息：显示单元格字体映射结果
             console.log('📝 单元格字体映射详情:');
@@ -750,44 +755,27 @@ export default function LoadCanvasButton({ editor, setIsLoading }) {
             console.log('  原始字体:', cellFontName || '未设置');
             console.log('  原始字号:', cellFontSize || '未设置');
             console.log('  原始颜色:', cellColorHex || '未设置');
-            console.log('  水平对齐:', cellHAlign || '未设置');
+            console.log('  原始水平对齐:', cell.hAlign || '未设置');
+            console.log('  处理后水平对齐:', cellHAlign || '未设置');
             console.log('  垂直对齐:', cellVAlign || '未设置');
             console.log('  映射字体:', mapExcelFontToTL(cellFontName));
             console.log('  映射字号:', mapPtToTLSize(cellFontSize));
             console.log('  映射颜色:', normalizeTextColor(cellColorHex));
 
-            // 根据垂直对齐计算Y坐标
-            let textY = y + 2; // 默认顶部对齐
-            if (cellVAlign === 'middle') {
-              textY = y + (h / 2) - 6; // 垂直居中，减去字体高度的一半
-            } else if (cellVAlign === 'bottom') {
-              textY = y + h - 14; // 底部对齐，减去字体高度
-            }
-            
-            // 根据水平对齐计算X坐标
-            let textX = x + 2; // 默认左对齐
-            if (cellHAlign === 'center') {
-              textX = x + (w / 2) - (cell.v.length * 4); // 水平居中，粗略估算
-            } else if (cellHAlign === 'right') {
-              textX = x + w - (cell.v.length * 8) - 2; // 右对齐，粗略估算
-            }
-
-            const textShape = {
-              type: 'text',
-              x: textX,
-              y: textY,
-              props: {
-                w: Math.max(w - 4, 10), // 确保最小宽度
-                richText: toRichText(cell.v),
-                autoSize: false,
-                font: mapExcelFontToTL(cellFontName),
-                size: mapPtToTLSize(cellFontSize),
-                color: normalizeTextColor(cellColorHex)
-                // 注意：TLDraw v3的text形状不支持align属性，所以通过调整x,y坐标来实现对齐
-              }
-            };
-            
-            editor.createShape(textShape);
+            // 使用精准对齐函数创建文本
+            await placeTextWithAlignment(editor, {
+              cellX: x, 
+              cellY: y, 
+              cellW: w, 
+              cellH: h,
+              text: cell.v,
+              font: mapExcelFontToTL(cellFontName),
+              size: mapPtToTLSize(cellFontSize),
+              color: normalizeTextColor(cellColorHex),
+              hAlign: cellHAlign || 'left',     // 'left' | 'center' | 'right'
+              vAlign: cellVAlign || 'top',      // 'top' | 'middle' | 'bottom'
+              padding: 4,
+            });
           }
           
           // 单元格文本创建完成
@@ -1316,4 +1304,87 @@ function mapCellFillColor(hex) {
   if (brightness > 150) return 'grey';
   
   return 'grey'; // 默认返回灰色
+}
+
+/**
+ * 精准放置文本：基于实际渲染尺寸计算对齐位置
+ * 适用于 Excel 单元格或文本框的文字居中 / 底部对齐
+ */
+async function placeTextWithAlignment(editor, {
+  cellX, cellY, cellW, cellH,
+  text, font, size, color,
+  hAlign = 'left',   // 'left' | 'center' | 'right'
+  vAlign = 'top',    // 'top' | 'middle' | 'bottom'
+  padding = 4,
+}) {
+  // 纯空白（只含空格/换行）直接跳过
+  if (!text || !text.replace(/\s+/g, '')) return null
+
+  const id = `shape:${(crypto.randomUUID?.() || Math.random().toString(36).slice(2))}`
+
+  // 1) 第一次：自适应宽度（不换行），拿"字形真实宽度"
+  editor.createShape({
+    id,
+    type: 'text',
+    x: cellX + padding,
+    y: cellY + padding,
+    props: {
+      autoSize: true,                // 关键：先让它按内容收缩
+      richText: toRichText(text),
+      font, size, color,
+    },
+  })
+  await new Promise(requestAnimationFrame)
+
+  const b1 = editor.getShapePageBounds(id)
+  const contentW = Math.ceil(b1?.w ?? 0)    // 真实字形宽度（单行/短文本很重要）
+  const contentH = Math.ceil(b1?.h ?? 0)
+
+  // 2) 计算最终宽度（是否需要换行）
+  const maxW = Math.max(10, Math.floor(cellW - padding * 2))
+  const finalW = Math.min(maxW, contentW || maxW) // 短内容不换行，长内容才限制宽度
+
+  // 3) 更新为固定宽度（触发换行），再测"最终高度"
+  editor.updateShape({
+    id,
+    type: 'text',
+    props: { autoSize: false, w: finalW },
+  })
+  await new Promise(requestAnimationFrame)
+
+  const b2 = editor.getShapePageBounds(id)
+  const textH = Math.ceil(b2?.h ?? (contentH || 0))
+
+  // 4) 用"字形真实宽度"算水平位置（不是用 finalW！）
+  const glyphW = Math.min(contentW || finalW, finalW)
+  let x = cellX + padding
+  if (hAlign === 'center') x = Math.round(cellX + (cellW - glyphW) / 2)
+  else if (hAlign === 'right') x = Math.round(cellX + cellW - glyphW - padding)
+
+  // 5) 垂直位置用最终高度
+  let y = cellY + padding
+  if (vAlign === 'middle') y = Math.round(cellY + (cellH - textH) / 2)
+  else if (vAlign === 'bottom') y = Math.round(cellY + cellH - textH - padding)
+
+  // 6) 边界护栏（避免极端小格子产生负位置）
+  const minX = cellX + padding
+  const maxX = cellX + cellW - glyphW - padding
+  if (minX <= maxX) x = Math.max(minX, Math.min(x, maxX))
+
+  const minY = cellY + padding
+  const maxY = cellY + cellH - textH - padding
+  if (minY <= maxY) y = Math.max(minY, Math.min(y, maxY))
+
+  // 调试信息：输出计算过程
+  console.log(`🎯 文本对齐调试: "${text}"`);
+  console.log(`  单元格: x=${cellX}, y=${cellY}, w=${cellW}, h=${cellH}`);
+  console.log(`  字形真实宽度: ${contentW}`);
+  console.log(`  最终宽度: ${finalW}`);
+  console.log(`  最终高度: ${textH}`);
+  console.log(`  对齐方式: hAlign=${hAlign}, vAlign=${vAlign}`);
+  console.log(`  计算位置: x=${x}, y=${y}`);
+  console.log(`  边界检查: minX=${minX}, maxX=${maxX}, minY=${minY}, maxY=${maxY}`);
+
+  editor.updateShape({ id, type: 'text', x, y })
+  return id
 }
