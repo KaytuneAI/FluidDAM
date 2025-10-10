@@ -585,6 +585,11 @@ Private Function BuildShapeJson(shp As Shape, pt2px As Double) As String
     textContent = GetShapeText(shp)
     sb = sb & Q("text") & ":" & Q(EscapeJson(textContent)) & ","
     
+    ' Get rich text formatting information
+    Dim richTextFormatting As String
+    richTextFormatting = GetRichTextFormatting(shp)
+    sb = sb & Q("richTextFormatting") & ":" & richTextFormatting & ","
+    
     ' border information
     sb = sb & Q("border") & ":{"
     sb = sb & Q("style") & ":" & Q(GetShapeBorderStyle(shp)) & ","
@@ -621,6 +626,97 @@ Private Function GetShapeText(shp As Shape) As String
     If Err.Number <> 0 Then
         GetShapeText = ""
     End If
+End Function
+
+' Get rich text formatting information for a shape
+Private Function GetRichTextFormatting(shp As Shape) As String
+    On Error Resume Next
+    
+    Dim sb As String: sb = "["
+    Dim first As Boolean: first = True
+    
+    ' 检查是否有文本
+    If Not shp.TextFrame2.HasText Then
+        GetRichTextFormatting = "[]"
+        Exit Function
+    End If
+    
+    Dim textRange As Object
+    Set textRange = shp.TextFrame2.TextRange
+    
+    ' 遍历每个字符，检查格式化变化
+    Dim i As Long
+    Dim currentFont As String, currentSize As Double, currentBold As Boolean, currentItalic As Boolean, currentColor As String
+    Dim startPos As Long, endPos As Long
+    Dim textLength As Long
+    
+    textLength = textRange.Length
+    If textLength = 0 Then
+        GetRichTextFormatting = "[]"
+        Exit Function
+    End If
+    
+    ' 初始化第一个字符的格式
+    currentFont = textRange.Characters(1, 1).Font.Name
+    currentSize = textRange.Characters(1, 1).Font.Size
+    currentBold = (textRange.Characters(1, 1).Font.Bold = msoTrue)
+    currentItalic = (textRange.Characters(1, 1).Font.Italic = msoTrue)
+    currentColor = RGBToHex(textRange.Characters(1, 1).Font.Fill.ForeColor.RGB)
+    startPos = 1
+    
+    ' 遍历所有字符，寻找格式变化
+    For i = 2 To textLength
+        Dim charFont As String, charSize As Double, charBold As Boolean, charItalic As Boolean, charColor As String
+        
+        charFont = textRange.Characters(i, 1).Font.Name
+        charSize = textRange.Characters(i, 1).Font.Size
+        charBold = (textRange.Characters(i, 1).Font.Bold = msoTrue)
+        charItalic = (textRange.Characters(i, 1).Font.Italic = msoTrue)
+        charColor = RGBToHex(textRange.Characters(i, 1).Font.Fill.ForeColor.RGB)
+        
+        ' 检查格式是否发生变化
+        If charFont <> currentFont Or charSize <> currentSize Or charBold <> currentBold Or charItalic <> currentItalic Or charColor <> currentColor Then
+            ' 格式发生变化，保存当前段落的格式信息
+            endPos = i - 1
+            
+            If Not first Then sb = sb & "," Else first = False
+            sb = sb & "{"
+            sb = sb & Q("start") & ":" & CNum(startPos) & ","
+            sb = sb & Q("end") & ":" & CNum(endPos) & ","
+            sb = sb & Q("fontName") & ":" & Q(EscapeJson(currentFont)) & ","
+            sb = sb & Q("fontSize") & ":" & CNumD(currentSize) & ","
+            sb = sb & Q("bold") & ":" & LCase$(CStr(currentBold)) & ","
+            sb = sb & Q("italic") & ":" & LCase$(CStr(currentItalic)) & ","
+            sb = sb & Q("color") & ":" & Q(currentColor)
+            sb = sb & "}"
+            
+            ' 更新当前格式
+            currentFont = charFont
+            currentSize = charSize
+            currentBold = charBold
+            currentItalic = charItalic
+            currentColor = charColor
+            startPos = i
+        End If
+    Next i
+    
+    ' 处理最后一段
+    endPos = textLength
+    If Not first Then sb = sb & "," Else first = False
+    sb = sb & "{"
+    sb = sb & Q("start") & ":" & CNum(startPos) & ","
+    sb = sb & Q("end") & ":" & CNum(endPos) & ","
+    sb = sb & Q("fontName") & ":" & Q(EscapeJson(currentFont)) & ","
+    sb = sb & Q("fontSize") & ":" & CNumD(currentSize) & ","
+    sb = sb & Q("bold") & ":" & LCase$(CStr(currentBold)) & ","
+    sb = sb & Q("italic") & ":" & LCase$(CStr(currentItalic)) & ","
+    sb = sb & Q("color") & ":" & Q(currentColor)
+    sb = sb & "}"
+    
+    sb = sb & "]"
+    GetRichTextFormatting = sb
+    
+    On Error GoTo 0
 End Function
 
 ' Get shape border style

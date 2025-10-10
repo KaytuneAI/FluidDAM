@@ -162,10 +162,24 @@ export default function LoadCanvasButton({ editor, setIsLoading }) {
         editor.deleteShapes(shapeIds);
       }
       
-      // 6. 处理布局数据并创建形状
+      // 6. 设置页面名称为sheet名称
+      if (layoutData.sheet && layoutData.sheet.name) {
+        try {
+          const currentPageId = editor.getCurrentPageId();
+          editor.updatePage({
+            id: currentPageId,
+            name: layoutData.sheet.name
+          });
+          console.log(`页面名称已设置为: ${layoutData.sheet.name}`);
+        } catch (error) {
+          console.warn('设置页面名称失败:', error);
+        }
+      }
+      
+      // 7. 处理布局数据并创建形状
       await processLayoutData(layoutData, file);
       
-      // 6.5 触发自动保存，确保导入的内容被保存
+      // 8. 触发自动保存，确保导入的内容被保存
       setTimeout(async () => {
         try {
           console.log('===== Excel导入完成后触发自动保存 =====');
@@ -229,7 +243,7 @@ export default function LoadCanvasButton({ editor, setIsLoading }) {
         }
       }, 1500); // 增加等待时间到 1.5 秒
       
-      // 7. 移除加载提示
+      // 9. 移除加载提示
       document.body.removeChild(loadingMessage);
       console.log('Excel LayoutJson重构测试完成！');
       
@@ -495,55 +509,75 @@ export default function LoadCanvasButton({ editor, setIsLoading }) {
           const padding = 6; // 增加内边距，确保文字不贴边
           const textWidth = Math.max(textbox.width - (padding * 2), 20);
           
-          // 直接使用原始文本，让TLDraw自动处理换行
-          const processedText = textbox.text;
+          // 处理文本格式 - 使用最小字体（TLDraw不支持复杂富媒体）
+          let mainFont, mainSize, mainColor;
+          let hasRichFormatting = false;
           
-          // 使用TLDraw官方文档的正确语法，通过props.w设置固定宽度
-          // 从 JSON 中拿样式（字段名按照你导出的实际结构做兜底）
-          const excelFontName = textbox.style?.fontName || textbox.fontName || (textbox.font && textbox.font.name);
-          const excelFontSizePt = textbox.style?.fontSize || textbox.fontSize || (textbox.font && textbox.font.size);
-          const excelColorHex = textbox.style?.color || (textbox.font && textbox.font.color) || textbox.color;
-          const excelHAlign = textbox.style?.hAlign || textbox.hAlign || textbox.align || 'left';
-
-          const tlFont = mapExcelFontToTL(excelFontName);
-          const tlSize = mapPtToTLSize(excelFontSizePt);
-          const tlAlign = mapHAlignToTL(excelHAlign);
-          const tlColor = normalizeTextColor(excelColorHex);
-
-          // 调试信息：显示字体映射结果
-          console.log('🔤 文本框字体映射详情:');
-          console.log('  名称:', textbox.name);
-          console.log('  原始字体:', excelFontName || '未设置');
-          console.log('  原始字号:', excelFontSizePt || '未设置');
-          console.log('  原始颜色:', excelColorHex || '未设置');
-          console.log('  原始对齐:', excelHAlign || '未设置');
-          console.log('  映射字体:', tlFont);
-          console.log('  映射字号:', tlSize);
-          console.log('  映射对齐:', tlAlign);
-          console.log('  映射颜色:', tlColor);
+          // 检查是否有富媒体格式信息
+          if (textbox.richTextFormatting && textbox.richTextFormatting.length > 0) {
+            hasRichFormatting = true;
+            console.log('🎨 检测到富媒体文本格式，寻找最小字体:', textbox.richTextFormatting);
+            
+            // 找到最小的字体大小
+            let minFontSize = Infinity;
+            let minFormat = null;
+            
+            textbox.richTextFormatting.forEach((format, index) => {
+              if (format.fontSize < minFontSize) {
+                minFontSize = format.fontSize;
+                minFormat = format;
+              }
+            });
+            
+            if (minFormat) {
+              mainFont = mapExcelFontToTL(minFormat.fontName);
+              mainSize = mapPtToTLSize(minFormat.fontSize);
+              mainColor = normalizeTextColor(minFormat.color);
+              
+              console.log('📏 使用最小字体:', {
+                fontName: minFormat.fontName,
+                fontSize: minFormat.fontSize,
+                color: minFormat.color
+              });
+            }
+            
+            // 输出富媒体格式信息供调试
+            console.log('📋 富媒体格式详情:');
+            textbox.richTextFormatting.forEach((format, index) => {
+              const segment = textbox.text.substring(format.start, format.end + 1);
+              const isMinSize = format.fontSize === minFontSize;
+              console.log(`  段${index + 1}: "${segment}" (${format.start}-${format.end}) - ${format.fontName} ${format.fontSize}pt ${format.color} ${isMinSize ? '← 最小' : ''}`);
+            });
+          } else {
+            // 没有富媒体格式，使用默认格式
+            const excelFontName = textbox.style?.fontName || textbox.fontName || (textbox.font && textbox.font.name);
+            const excelFontSizePt = textbox.style?.fontSize || textbox.fontSize || (textbox.font && textbox.font.size);
+            const excelColorHex = textbox.style?.color || (textbox.font && textbox.font.color) || textbox.color;
+            
+            mainFont = mapExcelFontToTL(excelFontName);
+            mainSize = mapPtToTLSize(excelFontSizePt);
+            mainColor = normalizeTextColor(excelColorHex);
+          }
 
           const textShape = {
             type: 'text',
             x: textbox.left + padding,
             y: textbox.top + padding,
             props: {
-              richText: toRichText(processedText), // 使用toRichText函数
-              w: textWidth, // 设置固定宽度，让文本自动换行
-              autoSize: false, // 禁用自动调整大小，使用固定宽度
-              font: tlFont, // ← 应用字体族
-              size: tlSize, // ← 应用字号档位
-              color: tlColor // ← 颜色（可选）
-              // 注意：TLDraw v3的text形状不支持align属性
+              richText: toRichText(textbox.text),
+              w: textWidth,
+              autoSize: false,
+              font: mainFont,
+              size: mainSize,
+              color: mainColor
             }
           };
           
-          // 调试信息：显示实际创建的文本形状
           console.log('✅ 创建文本形状:');
           console.log('  名称:', textbox.name);
-          console.log('  文本:', processedText.substring(0, 20) + '...');
-          console.log('  字体:', textShape.props.font);
-          console.log('  字号:', textShape.props.size);
-          console.log('  颜色:', textShape.props.color);
+          console.log('  文本:', textbox.text.substring(0, 50) + (textbox.text.length > 50 ? '...' : ''));
+          console.log('  富媒体格式:', hasRichFormatting ? '是（已使用最小字体）' : '否');
+          console.log('  显示格式:', `${mainFont} ${mainSize} ${mainColor}`);
           
           editor.createShape(textShape);
           // 文本框创建完成
