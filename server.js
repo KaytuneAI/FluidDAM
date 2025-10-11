@@ -155,10 +155,28 @@ app.use((req, res, next) => {
 })
 
 // 中间件
-app.use(express.json({ limit: '50mb' })) // 增加JSON解析限制到50MB
-app.use(express.urlencoded({ limit: '50mb', extended: true })) // 增加URL编码限制
+app.use(express.json({ limit: '100mb' })) // 增加JSON解析限制到100MB
+app.use(express.urlencoded({ limit: '100mb', extended: true })) // 增加URL编码限制
 app.use(express.static('public'))
 app.use(express.static('.')) // 添加当前目录作为静态文件服务
+
+// 错误处理中间件
+app.use((error, req, res, next) => {
+  if (error.type === 'entity.too.large') {
+    log('ERROR', '请求体过大', { 
+      url: req.url, 
+      method: req.method,
+      contentLength: req.get('content-length'),
+      error: error.message 
+    })
+    return res.status(413).json({ 
+      success: false, 
+      error: '请求体过大，请减少数据大小后重试',
+      details: 'Request entity too large'
+    })
+  }
+  next(error)
+})
 
 // 创建分享文件夹
 const sharesDir = path.join(__dirname, 'public', 'shares')
