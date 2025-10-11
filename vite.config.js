@@ -19,13 +19,18 @@ export default defineConfig({
           if (id.includes('node_modules')) {
             if (id.includes('tldraw')) return 'vendor-tldraw'
             if (id.includes('xlsx') || id.includes('exceljs')) return 'vendor-excel'
-            if (id.includes('react')) return 'vendor-react'
-            if (id.includes('exceljs')) return 'vendor-exceljs'
+            if (id.includes('react') || id.includes('react-dom') || id.includes('scheduler')) return 'vendor-react'
             return 'vendor'
           }
           if (id.includes('/src/utils/')) return 'utils'
         },
       },
     },
+  },
+  resolve: {
+    alias: {
+      'react': 'react',
+      'react-dom': 'react-dom'
+    }
   },
 })
