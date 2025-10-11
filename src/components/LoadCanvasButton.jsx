@@ -1,5 +1,6 @@
 import React, { useRef, useState } from "react";
-import { loadSnapshot } from "tldraw";
+import { loadSnapshot, getSnapshot } from "tldraw";
+import { checkExistingImageByContent } from '../utils/assetUtils.js';
 import ExcelJS from 'exceljs';
 import { toRichText } from 'tldraw';
 import storageManager from '../utils/storageManager.js';
@@ -183,7 +184,7 @@ export default function LoadCanvasButton({ editor, setIsLoading }) {
       setTimeout(async () => {
         try {
           console.log('===== Excel导入完成后触发自动保存 =====');
-          const { getSnapshot } = await import('tldraw');
+          // 使用静态导入的 getSnapshot
           const canvasData = getSnapshot(editor.store);
           const currentPageId = editor.getCurrentPageId();
           const currentShapes = editor.getCurrentPageShapes();
@@ -376,7 +377,7 @@ export default function LoadCanvasButton({ editor, setIsLoading }) {
     // 提取图片创建函数
     async function createImageShape(editor, imageInfo, imageData) {
       // 检查是否已存在相同的图片（跨页面检测）
-      const { checkExistingImageByContent } = await import('../utils/assetUtils.js');
+      // 使用静态导入的 checkExistingImageByContent
       let assetId = await checkExistingImageByContent(editor, imageData.url);
       
       if (!assetId) {
@@ -887,7 +888,7 @@ export default function LoadCanvasButton({ editor, setIsLoading }) {
           setTimeout(async () => {
             try {
               console.log('===== 加载完成后触发自动保存 =====');
-              const { getSnapshot } = await import('tldraw');
+              // 使用静态导入的 getSnapshot
               const canvasData = getSnapshot(editor.store);
               const currentPageId = editor.getCurrentPageId();
               const currentShapes = editor.getCurrentPageShapes();

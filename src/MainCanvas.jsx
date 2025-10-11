@@ -1,5 +1,5 @@
 import React, { useMemo, useRef, useState, useEffect, useCallback } from "react";
-import { Tldraw, createTLStore, defaultShapeUtils, getSnapshot, createTLStore as createStore } from "tldraw";
+import { Tldraw, createTLStore, defaultShapeUtils, getSnapshot, createTLStore as createStore, loadSnapshot } from "tldraw";
 import "tldraw/tldraw.css";
 import { getApiBaseUrl } from './utils/apiUtils.js';
 import storageManager from './utils/storageManager.js';
@@ -184,7 +184,7 @@ export default function MainCanvas() {
         setIsAutoSaving(false);
         
         // 加载干净初始态快照
-        const { loadSnapshot } = await import('tldraw');
+        // 使用静态导入的 loadSnapshot
         loadSnapshot(store, pristineSnapshotRef.current);
         
         // 清除自动保存数据
@@ -214,7 +214,7 @@ export default function MainCanvas() {
         setIsAutoSaving(false);
         
         // 加载干净初始态快照
-        const { loadSnapshot } = await import('tldraw');
+        // 使用静态导入的 loadSnapshot
         loadSnapshot(store, pristineSnapshotRef.current);
         
         // 清除自动保存数据
@@ -326,7 +326,7 @@ export default function MainCanvas() {
     
     try {
       setIsAutoSaving(true);
-      const { getSnapshot } = await import('tldraw');
+      // 使用静态导入的 getSnapshot
       
       // 获取当前画布状态
       const canvasData = getSnapshot(editorRef.current.store);
@@ -776,7 +776,7 @@ export default function MainCanvas() {
           
           // 加载分享的画布数据
           if (shareData.canvasData) {
-            const { loadSnapshot } = await import('tldraw');
+            // 使用静态导入的 loadSnapshot
             
             // 加载完整的画布状态
             loadSnapshot(editorRef.current.store, shareData.canvasData);
@@ -879,7 +879,7 @@ export default function MainCanvas() {
       const saveData = JSON.parse(text);
       
       if (saveData.canvasData && saveData.version) {
-        const { loadSnapshot } = await import('tldraw');
+        // 使用静态导入的 loadSnapshot
         
         // 清空当前画布
         const currentShapes = editorRef.current.getCurrentPageShapes();
@@ -1071,7 +1071,7 @@ export default function MainCanvas() {
         // 检查是否是有效的画布保存文件
         if (saveData.canvasData && saveData.version) {
           // 使用和LoadCanvasButton相同的加载逻辑
-          const { loadSnapshot } = await import('tldraw');
+          // 使用静态导入的 loadSnapshot
           
           // 先清空当前画布
           const currentShapes = editorRef.current.getCurrentPageShapes();
@@ -1336,7 +1336,7 @@ export default function MainCanvas() {
               const saveData = JSON.parse(text);
               
               if (saveData.canvasData && saveData.version) {
-                const { loadSnapshot } = await import('tldraw');
+                // 使用静态导入的 loadSnapshot
                 
                 // 清空当前画布
                 const currentShapes = editorRef.current.getCurrentPageShapes();
