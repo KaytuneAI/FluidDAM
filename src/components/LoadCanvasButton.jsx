@@ -510,25 +510,115 @@ export default function LoadCanvasButton({ editor, setIsLoading }) {
             editor.createShape(cellBackgroundShape);
           }
           
-          // 创建单元格边框（透明填充，只显示边框，Z-order = -999）
-          const cellBorderShape = {
-            type: 'geo',
-            x: x, // 使用验证后的X坐标
-            y: y, // 使用验证后的Y坐标
-            props: {
-              geo: 'rectangle',
-              w: w, // 使用验证后的宽度
-              h: h, // 使用验证后的高度
-              fill: 'none',
-              color: 'grey', // 边框颜色固定为灰色
-              dash: 'solid',
-              size: 's' // 细线条
-            }
-          };
-          editor.createShape(cellBorderShape);
-          
         } catch (error) {
           console.warn('创建单元格背景失败:', cell, error);
+        }
+      }
+    }
+    
+    // 4.5. 处理VBA输出的边框数组（新增功能）
+    if (layoutData.sheet && layoutData.sheet.borders && layoutData.sheet.borders.length > 0) {
+      console.log('开始处理VBA输出的边框数组:', layoutData.sheet.borders.length);
+      
+      for (const borderItem of layoutData.sheet.borders) {
+        try {
+          // 验证边框数据
+          const x = typeof borderItem.x === 'number' ? borderItem.x : 0;
+          const y = typeof borderItem.y === 'number' ? borderItem.y : 0;
+          const w = typeof borderItem.width === 'number' && borderItem.width > 0 ? borderItem.width : 50;
+          const h = typeof borderItem.height === 'number' && borderItem.height > 0 ? borderItem.height : 20;
+          
+          // 检查边框信息
+          if (borderItem.borders) {
+            const { top, right, bottom, left } = borderItem.borders;
+            
+            // 根据边框信息创建相应的边框形状
+            if (top) {
+              const topBorderShape = {
+                type: 'geo',
+                x: x,
+                y: y,
+                props: {
+                  geo: 'rectangle',
+                  w: w,
+                  h: 1, // 细线高度
+                  fill: 'none',
+                  color: 'black',
+                  dash: 'solid',
+                  size: 's'
+                }
+              };
+              editor.createShape(topBorderShape);
+            }
+            
+            if (bottom) {
+              const bottomBorderShape = {
+                type: 'geo',
+                x: x,
+                y: y + h - 1,
+                props: {
+                  geo: 'rectangle',
+                  w: w,
+                  h: 1, // 细线高度
+                  fill: 'none',
+                  color: 'black',
+                  dash: 'solid',
+                  size: 's'
+                }
+              };
+              editor.createShape(bottomBorderShape);
+            }
+            
+            if (left) {
+              const leftBorderShape = {
+                type: 'geo',
+                x: x,
+                y: y,
+                props: {
+                  geo: 'rectangle',
+                  w: 1, // 细线宽度
+                  h: h,
+                  fill: 'none',
+                  color: 'black',
+                  dash: 'solid',
+                  size: 's'
+                }
+              };
+              editor.createShape(leftBorderShape);
+            }
+            
+            if (right) {
+              const rightBorderShape = {
+                type: 'geo',
+                x: x + w - 1,
+                y: y,
+                props: {
+                  geo: 'rectangle',
+                  w: 1, // 细线宽度
+                  h: h,
+                  fill: 'none',
+                  color: 'black',
+                  dash: 'solid',
+                  size: 's'
+                }
+              };
+              editor.createShape(rightBorderShape);
+            }
+            
+            // 如果有样式信息，使用样式信息
+            if (borderItem.styles) {
+              // 这里可以根据styles信息调整边框样式
+              // 目前先使用默认样式，后续可以扩展
+            }
+            
+            console.log('✅ 创建边框:', {
+              address: borderItem.address || `${borderItem.row},${borderItem.col}`,
+              borders: { top, right, bottom, left },
+              position: { x, y, w, h }
+            });
+          }
+        } catch (error) {
+          console.warn('创建边框失败:', borderItem, error);
         }
       }
     }

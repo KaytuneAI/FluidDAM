@@ -171,7 +171,7 @@ Public Sub ListAllPictures()
     MsgBox "Picture information has been output to immediate window, press Ctrl+G to view"
 End Sub
 
-' New: Debug function to list all border information
+' 升级：增强的边框调试函数 - 测试新的EdgeVisible功能
 Public Sub ListAllBorders()
     Dim ws As Worksheet
     Set ws = ActiveSheet
@@ -187,8 +187,9 @@ Public Sub ListAllBorders()
     borderCount = 0
     totalChecked = 0
     
-    Debug.Print "=== All Border Information in Current Worksheet ==="
+    Debug.Print "=== Enhanced Border Detection Test ==="
     Debug.Print "UsedRange: " & ur.Address
+    Debug.Print "Testing new EdgeVisible function..."
     
     For r = ur.row To ur.row + ur.Rows.Count - 1
         For c = ur.Column To ur.Column + ur.Columns.Count - 1
@@ -199,31 +200,188 @@ Public Sub ListAllBorders()
             ' 测试前几个单元格的详细信息
             If totalChecked <= 10 Then
                 Debug.Print "Testing cell " & cell.Address & ":"
-                Debug.Print "  DisplayFormat.Top: " & cell.DisplayFormat.Borders(xlEdgeTop).lineStyle
-                Debug.Print "  Regular.Top: " & cell.Borders(xlEdgeTop).lineStyle
-                Debug.Print "  xlLineStyleNone = " & xlLineStyleNone
+                Debug.Print "  EdgeVisible Top: " & EdgeVisible(cell, xlEdgeTop)
+                Debug.Print "  EdgeVisible Right: " & EdgeVisible(cell, xlEdgeRight)
+                Debug.Print "  EdgeVisible Bottom: " & EdgeVisible(cell, xlEdgeBottom)
+                Debug.Print "  EdgeVisible Left: " & EdgeVisible(cell, xlEdgeLeft)
             End If
             
             If HasCellBorder(cell) Then
                 borderCount = borderCount + 1
                 Debug.Print borderCount & ". Cell: " & cell.Address & " | Row: " & r & " | Col: " & c
                 
-                ' Check each border using DisplayFormat first
-                If cell.DisplayFormat.Borders(xlEdgeTop).lineStyle <> xlLineStyleNone Then
-                    Debug.Print "   Top Border (Display): " & GetBorderStyleName(cell.DisplayFormat.Borders(xlEdgeTop).lineStyle) & _
-                               " | Color: " & RGBToHex(cell.DisplayFormat.Borders(xlEdgeTop).Color)
-                ElseIf cell.Borders(xlEdgeTop).lineStyle <> xlLineStyleNone Then
-                    Debug.Print "   Top Border (Regular): " & GetBorderStyleName(cell.Borders(xlEdgeTop).lineStyle) & _
-                               " | Color: " & RGBToHex(cell.Borders(xlEdgeTop).Color)
-                End If
+                ' 使用新的EdgeVisible函数检测各边
+                Dim hasTop As Boolean, hasRight As Boolean, hasBottom As Boolean, hasLeft As Boolean
+                hasTop = EdgeVisible(cell, xlEdgeTop)
+                hasRight = EdgeVisible(cell, xlEdgeRight)
+                hasBottom = EdgeVisible(cell, xlEdgeBottom)
+                hasLeft = EdgeVisible(cell, xlEdgeLeft)
                 
-                ' Similar for other borders...
+                Debug.Print "   Borders: Top=" & hasTop & ", Right=" & hasRight & ", Bottom=" & hasBottom & ", Left=" & hasLeft
+                
+                ' 测试JSON输出
+                Dim testJson As String
+                testJson = BuildBorderJson(cell, r, c, PtToPxFactor())
+                Debug.Print "   JSON: " & Left(testJson, 100) & "..."
             End If
         Next c
     Next r
     
-    MsgBox "Checked " & totalChecked & " cells, found " & borderCount & " cells with borders" & vbCrLf & _
+    MsgBox "Enhanced border detection completed!" & vbCrLf & _
+           "Checked " & totalChecked & " cells, found " & borderCount & " cells with borders" & vbCrLf & _
            "Detailed information has been output to immediate window, press Ctrl+G to view", vbInformation
+End Sub
+
+' 新增：专门测试2x2样本和合并单元格的测试函数
+Public Sub TestBorderDetection()
+    Dim ws As Worksheet
+    Set ws = ActiveSheet
+    
+    Debug.Print "=== Border Detection Test Suite ==="
+    
+    ' 测试1: 2x2样本测试
+    Debug.Print "Test 1: 2x2 sample test"
+    Dim testRange As Range
+    Set testRange = ws.Range("A1:B2")
+    
+    Dim r As Long, c As Long
+    For r = 1 To 2
+        For c = 1 To 2
+            Dim cell As Range
+            Set cell = testRange.Cells(r, c)
+            Debug.Print "Cell " & cell.Address & ":"
+            Debug.Print "  Top: " & EdgeVisible(cell, xlEdgeTop)
+            Debug.Print "  Right: " & EdgeVisible(cell, xlEdgeRight)
+            Debug.Print "  Bottom: " & EdgeVisible(cell, xlEdgeBottom)
+            Debug.Print "  Left: " & EdgeVisible(cell, xlEdgeLeft)
+        Next c
+    Next r
+    
+    ' 测试2: 合并单元格测试
+    Debug.Print "Test 2: Merged cell test"
+    Dim mergedCell As Range
+    Set mergedCell = ws.Range("D1:E2")
+    If mergedCell.MergeCells Then
+        Debug.Print "Merged cell " & mergedCell.Address & ":"
+        Debug.Print "  Top: " & EdgeVisible(mergedCell, xlEdgeTop)
+        Debug.Print "  Right: " & EdgeVisible(mergedCell, xlEdgeRight)
+        Debug.Print "  Bottom: " & EdgeVisible(mergedCell, xlEdgeBottom)
+        Debug.Print "  Left: " & EdgeVisible(mergedCell, xlEdgeLeft)
+    Else
+        Debug.Print "No merged cell found at D1:E2"
+    End If
+    
+    MsgBox "Border detection test completed! Check immediate window for results.", vbInformation
+End Sub
+
+' 新增：测试JSON格式的函数
+Public Sub TestBorderJson()
+    Dim ws As Worksheet
+    Set ws = ActiveSheet
+    
+    Debug.Print "=== Border JSON Test ==="
+    
+    On Error Resume Next
+    
+    ' 测试基本函数是否存在
+    Debug.Print "Testing basic functions..."
+    Dim pt2px As Double
+    pt2px = PtToPxFactor()
+    Debug.Print "PtToPxFactor: " & pt2px
+    
+    ' 测试单个单元格的JSON输出
+    Dim testCell As Range
+    Set testCell = ws.Range("A1")
+    
+    Debug.Print "Testing cell A1..."
+    Dim testJson As String
+    testJson = BuildBorderJson(testCell, 1, 1, pt2px)
+    
+    Debug.Print "Test JSON for A1:"
+    Debug.Print testJson
+    Debug.Print "JSON length: " & Len(testJson)
+    
+    ' 测试边框数组JSON输出
+    Debug.Print "Testing borders array..."
+    Dim borderCount As Long
+    Dim bordersJson As String
+    bordersJson = BordersToJson(ws, pt2px, borderCount)
+    
+    Debug.Print "Borders JSON length: " & Len(bordersJson)
+    Debug.Print "Borders JSON (first 200 chars):"
+    Debug.Print Left(bordersJson, 200)
+    Debug.Print "Total borders found: " & borderCount
+    
+    If Err.Number <> 0 Then
+        Debug.Print "Error in TestBorderJson: " & Err.Description
+        Err.Clear
+    End If
+    
+    On Error GoTo 0
+    
+    MsgBox "JSON test completed! Check immediate window for results.", vbInformation
+End Sub
+
+' 简化的测试函数
+Public Sub TestSimple()
+    Debug.Print "=== Simple Test ==="
+    
+    On Error Resume Next
+    
+    ' 测试基本函数
+    Dim pt2px As Double
+    pt2px = PtToPxFactor()
+    Debug.Print "PtToPxFactor works: " & pt2px
+    
+    If Err.Number <> 0 Then
+        Debug.Print "PtToPxFactor Error: " & Err.Description
+        Err.Clear
+    End If
+    
+    ' 测试EdgeVisible函数
+    Dim ws As Worksheet
+    Set ws = ActiveSheet
+    Dim cell As Range
+    Set cell = ws.Range("A1")
+    
+    Dim hasTop As Boolean
+    hasTop = EdgeVisible(cell, xlEdgeTop)
+    Debug.Print "EdgeVisible works: " & hasTop
+    
+    If Err.Number <> 0 Then
+        Debug.Print "EdgeVisible Error: " & Err.Description
+        Err.Clear
+    End If
+    
+    On Error GoTo 0
+    
+    MsgBox "Simple test completed!"
+End Sub
+
+' 最基础的测试函数
+Public Sub TestBasic()
+    Debug.Print "=== Basic Test ==="
+    
+    On Error Resume Next
+    
+    ' 测试基本变量
+    Dim testVar As String
+    testVar = "Hello"
+    Debug.Print "Basic variable works: " & testVar
+    
+    ' 测试基本函数调用
+    Dim pt2px As Double
+    pt2px = PtToPxFactor()
+    Debug.Print "PtToPxFactor result: " & pt2px
+    
+    If Err.Number <> 0 Then
+        Debug.Print "Error in TestBasic: " & Err.Description
+        Err.Clear
+    End If
+    
+    On Error GoTo 0
+    
+    MsgBox "Basic test completed!"
 End Sub
 
 ' 新增：列出所有已导出的工作表信息
@@ -367,7 +525,7 @@ Private Function CellsToJsonSparse(ByVal ws As Worksheet, ByRef nonEmptyCount As
                 Dim mergeArea As Range
                 Set mergeArea = representativeCell.MergeArea
                 
-                ' 构建单元格信息，包括位置、尺寸、对齐方式和底色
+                ' 构建单元格信息，包括位置、尺寸、对齐方式、底色和字体信息
                 ' 对于合并单元格，使用合并区域的尺寸
                 sb = sb & "{""r"":" & CNum(ur.row + r - 1) & _
                           ",""c"":" & CNum(ur.Column + c - 1) & _
@@ -379,6 +537,11 @@ Private Function CellsToJsonSparse(ByVal ws As Worksheet, ByRef nonEmptyCount As
                           """hAlign"":""" & GetCellHAlign(representativeCell) & """," & _
                           """vAlign"":""" & GetCellVAlign(representativeCell) & """," & _
                           """fillColor"":""" & GetCellFillColor(representativeCell) & """," & _
+                          """fontName"":""" & EscapeJson(representativeCell.Font.Name) & """," & _
+                          """fontSize"":" & CNumD(representativeCell.Font.Size) & "," & _
+                          """fontColor"":""" & RGBToHex(representativeCell.Font.Color) & """," & _
+                          """fontBold"":" & LCase$(CStr(representativeCell.Font.Bold)) & "," & _
+                          """fontItalic"":" & LCase$(CStr(representativeCell.Font.Italic)) & "," & _
                           """isMerged"":" & IIf(representativeCell.MergeCells, "true", "false") & "," & _
                           """mergeArea"":""" & mergeArea.Address & """}"
                 
@@ -1008,13 +1171,8 @@ Private Function BordersToJson(ByVal ws As Worksheet, ByVal pt2px As Double, ByR
                 On Error Resume Next
                 If Not first Then sb = sb & "," Else first = False
                 
-                ' 构建边框JSON（包含基本边框信息）
-                sb = sb & "{""row"":" & r & ",""col"":" & c & ",""address"":""" & cell.Address & """"
-                sb = sb & ",""x"":" & CNumD(cell.Left * pt2px)
-                sb = sb & ",""y"":" & CNumD(cell.Top * pt2px)
-                sb = sb & ",""width"":" & CNumD(cell.Width * pt2px)
-                sb = sb & ",""height"":" & CNumD(cell.Height * pt2px)
-                sb = sb & "}"
+                ' 使用新的BuildBorderJson函数构建完整的边框JSON
+                sb = sb & BuildBorderJson(cell, r, c, pt2px)
                 borderCount = borderCount + 1
                 
                 Debug.Print "BordersToJson: JSON so far length = " & Len(sb)
@@ -1031,6 +1189,7 @@ Private Function BordersToJson(ByVal ws As Worksheet, ByVal pt2px As Double, ByR
     
     Debug.Print "BordersToJson: Checked " & checkedCount & " cells, found " & borderCount & " borders"
     
+    ' 修复：确保JSON格式正确
     sb = sb & "]"
     BordersToJson = sb
     Exit Function
@@ -1056,65 +1215,232 @@ Private Function GetRepresentativeCell(ByVal cell As Range) As Range
     End If
 End Function
 
-' Check if cell has borders (try both DisplayFormat and regular Borders)
+' ================ ENHANCED BORDER DETECTION =================
+' 新增：可视边检测核心函数 - 检测单个单元格的某条边是否可见
+Private Function EdgeVisible(ByVal cell As Range, ByVal which As XlBordersIndex) As Boolean
+    On Error Resume Next
+    EdgeVisible = False
+    
+    Dim ws As Worksheet
+    Set ws = cell.Worksheet
+    Dim r As Long, c As Long
+    r = cell.Row: c = cell.Column
+    
+    ' 获取样式来源（合并单元格使用MergeArea(1,1)）
+    Dim src As Range
+    If cell.MergeCells Then
+        Set src = cell.MergeArea.Cells(1, 1)
+    Else
+        Set src = cell
+    End If
+    
+    ' 1. 本格优先：检查当前单元格的边框
+    If src.DisplayFormat.Borders(which).lineStyle <> xlLineStyleNone Then
+        EdgeVisible = True
+        Exit Function
+    ElseIf src.Borders(which).lineStyle <> xlLineStyleNone Then
+        EdgeVisible = True
+        Exit Function
+    End If
+    
+    ' 2. 相邻格兜底：检查相邻单元格的对边
+    Dim neighborCell As Range
+    Select Case which
+        Case xlEdgeTop
+            ' Top边：检查上一行的Bottom边
+            If r > 1 Then
+                Set neighborCell = ws.Cells(r - 1, c)
+                If neighborCell.DisplayFormat.Borders(xlEdgeBottom).lineStyle <> xlLineStyleNone Then
+                    EdgeVisible = True
+                    Exit Function
+                ElseIf neighborCell.Borders(xlEdgeBottom).lineStyle <> xlLineStyleNone Then
+                    EdgeVisible = True
+                    Exit Function
+                End If
+            End If
+        Case xlEdgeBottom
+            ' Bottom边：检查下一行的Top边
+            If r < ws.Rows.Count Then
+                Set neighborCell = ws.Cells(r + 1, c)
+                If neighborCell.DisplayFormat.Borders(xlEdgeTop).lineStyle <> xlLineStyleNone Then
+                    EdgeVisible = True
+                    Exit Function
+                ElseIf neighborCell.Borders(xlEdgeTop).lineStyle <> xlLineStyleNone Then
+                    EdgeVisible = True
+                    Exit Function
+                End If
+            End If
+        Case xlEdgeLeft
+            ' Left边：检查左一列的Right边
+            If c > 1 Then
+                Set neighborCell = ws.Cells(r, c - 1)
+                If neighborCell.DisplayFormat.Borders(xlEdgeRight).lineStyle <> xlLineStyleNone Then
+                    EdgeVisible = True
+                    Exit Function
+                ElseIf neighborCell.Borders(xlEdgeRight).lineStyle <> xlLineStyleNone Then
+                    EdgeVisible = True
+                    Exit Function
+                End If
+            End If
+        Case xlEdgeRight
+            ' Right边：检查右一列的Left边
+            If c < ws.Columns.Count Then
+                Set neighborCell = ws.Cells(r, c + 1)
+                If neighborCell.DisplayFormat.Borders(xlEdgeLeft).lineStyle <> xlLineStyleNone Then
+                    EdgeVisible = True
+                    Exit Function
+                ElseIf neighborCell.Borders(xlEdgeLeft).lineStyle <> xlLineStyleNone Then
+                    EdgeVisible = True
+                    Exit Function
+                End If
+            End If
+    End Select
+    
+    ' 3. Inside线检测（关键改进）
+    Dim insideRange As Range
+    Select Case which
+        Case xlEdgeTop
+            ' Top边：检查与上一行的InsideHorizontal
+            If r > 1 Then
+                Set insideRange = ws.Range(ws.Cells(r - 1, c), ws.Cells(r, c))
+                If insideRange.DisplayFormat.Borders(xlInsideHorizontal).lineStyle <> xlLineStyleNone Then
+                    EdgeVisible = True
+                    Exit Function
+                ElseIf insideRange.Borders(xlInsideHorizontal).lineStyle <> xlLineStyleNone Then
+                    EdgeVisible = True
+                    Exit Function
+                End If
+            End If
+        Case xlEdgeBottom
+            ' Bottom边：检查与下一行的InsideHorizontal
+            If r < ws.Rows.Count Then
+                Set insideRange = ws.Range(ws.Cells(r, c), ws.Cells(r + 1, c))
+                If insideRange.DisplayFormat.Borders(xlInsideHorizontal).lineStyle <> xlLineStyleNone Then
+                    EdgeVisible = True
+                    Exit Function
+                ElseIf insideRange.Borders(xlInsideHorizontal).lineStyle <> xlLineStyleNone Then
+                    EdgeVisible = True
+                    Exit Function
+                End If
+            End If
+        Case xlEdgeLeft
+            ' Left边：检查与左一列的InsideVertical
+            If c > 1 Then
+                Set insideRange = ws.Range(ws.Cells(r, c - 1), ws.Cells(r, c))
+                If insideRange.DisplayFormat.Borders(xlInsideVertical).lineStyle <> xlLineStyleNone Then
+                    EdgeVisible = True
+                    Exit Function
+                ElseIf insideRange.Borders(xlInsideVertical).lineStyle <> xlLineStyleNone Then
+                    EdgeVisible = True
+                    Exit Function
+                End If
+            End If
+        Case xlEdgeRight
+            ' Right边：检查与右一列的InsideVertical
+            If c < ws.Columns.Count Then
+                Set insideRange = ws.Range(ws.Cells(r, c), ws.Cells(r, c + 1))
+                If insideRange.DisplayFormat.Borders(xlInsideVertical).lineStyle <> xlLineStyleNone Then
+                    EdgeVisible = True
+                    Exit Function
+                ElseIf insideRange.Borders(xlInsideVertical).lineStyle <> xlLineStyleNone Then
+                    EdgeVisible = True
+                    Exit Function
+                End If
+            End If
+    End Select
+    
+    On Error GoTo 0
+End Function
+
+' 升级：使用EdgeVisible的HasCellBorder函数
 Private Function HasCellBorder(ByVal cell As Range) As Boolean
     On Error Resume Next
     HasCellBorder = False
     
-    ' 先尝试使用 DisplayFormat（包括条件格式）
+    ' 使用新的EdgeVisible函数检测四条边
     Dim hasTop As Boolean, hasBottom As Boolean, hasLeft As Boolean, hasRight As Boolean
     
-    hasTop = (cell.DisplayFormat.Borders(xlEdgeTop).lineStyle <> xlLineStyleNone)
-    hasBottom = (cell.DisplayFormat.Borders(xlEdgeBottom).lineStyle <> xlLineStyleNone)
-    hasLeft = (cell.DisplayFormat.Borders(xlEdgeLeft).lineStyle <> xlLineStyleNone)
-    hasRight = (cell.DisplayFormat.Borders(xlEdgeRight).lineStyle <> xlLineStyleNone)
-    
-    ' 如果DisplayFormat没有找到边框，尝试使用普通的Borders
-    If Not (hasTop Or hasBottom Or hasLeft Or hasRight) Then
-        hasTop = (cell.Borders(xlEdgeTop).lineStyle <> xlLineStyleNone)
-        hasBottom = (cell.Borders(xlEdgeBottom).lineStyle <> xlLineStyleNone)
-        hasLeft = (cell.Borders(xlEdgeLeft).lineStyle <> xlLineStyleNone)
-        hasRight = (cell.Borders(xlEdgeRight).lineStyle <> xlLineStyleNone)
-    End If
+    hasTop = EdgeVisible(cell, xlEdgeTop)
+    hasBottom = EdgeVisible(cell, xlEdgeBottom)
+    hasLeft = EdgeVisible(cell, xlEdgeLeft)
+    hasRight = EdgeVisible(cell, xlEdgeRight)
     
     HasCellBorder = hasTop Or hasBottom Or hasLeft Or hasRight
     
     On Error GoTo 0
 End Function
 
-' Build JSON string for a single border
+' 升级：BuildBorderJson函数 - 确保边框信息正确输出
 Private Function BuildBorderJson(ByVal cell As Range, ByVal row As Long, ByVal col As Long, ByVal pt2px As Double) As String
     Dim sb As String
-    Dim bounds As Object
-    Set bounds = GetCellBounds(cell, pt2px)
+    
+    ' 直接计算坐标和尺寸，避免字典点访问
+    Dim x As Double, y As Double, w As Double, h As Double
+    x = cell.Left * pt2px
+    y = cell.Top * pt2px
+    w = cell.Width * pt2px
+    h = cell.Height * pt2px
+    
+    ' 使用EdgeVisible检测四条边的可见性
+    Dim hasTop As Boolean, hasBottom As Boolean, hasLeft As Boolean, hasRight As Boolean
+    hasTop = EdgeVisible(cell, xlEdgeTop)
+    hasBottom = EdgeVisible(cell, xlEdgeBottom)
+    hasLeft = EdgeVisible(cell, xlEdgeLeft)
+    hasRight = EdgeVisible(cell, xlEdgeRight)
     
     sb = "{"
     sb = sb & Q("row") & ":" & CNum(row) & ","
     sb = sb & Q("col") & ":" & CNum(col) & ","
-    sb = sb & Q("x") & ":" & CNumD(bounds.x) & ","
-    sb = sb & Q("y") & ":" & CNumD(bounds.y) & ","
-    sb = sb & Q("width") & ":" & CNumD(bounds.Width) & ","
-    sb = sb & Q("height") & ":" & CNumD(bounds.Height) & ","
+    sb = sb & Q("x") & ":" & CNumD(x) & ","
+    sb = sb & Q("y") & ":" & CNumD(y) & ","
+    sb = sb & Q("width") & ":" & CNumD(w) & ","
+    sb = sb & Q("height") & ":" & CNumD(h) & ","
+    
+    ' 输出边框布尔值
     sb = sb & Q("borders") & ":{"
-    sb = sb & BuildBorderSides(cell)
+    sb = sb & Q("top") & ":" & LCase$(CStr(hasTop)) & ","
+    sb = sb & Q("right") & ":" & LCase$(CStr(hasRight)) & ","
+    sb = sb & Q("bottom") & ":" & LCase$(CStr(hasBottom)) & ","
+    sb = sb & Q("left") & ":" & LCase$(CStr(hasLeft))
     sb = sb & "}"
+    
+    ' 输出边框样式信息（如果存在边框）
+    If hasTop Or hasBottom Or hasLeft Or hasRight Then
+        sb = sb & "," & Q("styles") & ":{"
+        Dim first As Boolean: first = True
+        
+        On Error Resume Next
+        
+        If hasTop Then
+            If Not first Then sb = sb & "," Else first = False
+            sb = sb & Q("top") & ":" & BuildBorderSideInfo(cell, xlEdgeTop)
+        End If
+        
+        If hasRight Then
+            If Not first Then sb = sb & "," Else first = False
+            sb = sb & Q("right") & ":" & BuildBorderSideInfo(cell, xlEdgeRight)
+        End If
+        
+        If hasBottom Then
+            If Not first Then sb = sb & "," Else first = False
+            sb = sb & Q("bottom") & ":" & BuildBorderSideInfo(cell, xlEdgeBottom)
+        End If
+        
+        If hasLeft Then
+            If Not first Then sb = sb & "," Else first = False
+            sb = sb & Q("left") & ":" & BuildBorderSideInfo(cell, xlEdgeLeft)
+        End If
+        
+        On Error GoTo 0
+        sb = sb & "}"
+    End If
+    
     sb = sb & "}"
     
     BuildBorderJson = sb
 End Function
 
-' Get cell boundary information
-Private Function GetCellBounds(ByVal cell As Range, ByVal pt2px As Double) As Object
-    Dim bounds As Object
-    Set bounds = CreateObject("Scripting.Dictionary")
-    
-    bounds("x") = cell.Left * pt2px
-    bounds("y") = cell.Top * pt2px
-    bounds("width") = cell.Width * pt2px
-    bounds("height") = cell.Height * pt2px
-    
-    Set GetCellBounds = bounds
-End Function
+' Get cell boundary information - REMOVED: 改为直接计算避免字典点访问
 
 ' Build information for each border side (using DisplayFormat)
 Private Function BuildBorderSides(ByVal cell As Range) As String
@@ -1149,29 +1475,106 @@ Private Function BuildBorderSides(ByVal cell As Range) As String
 End Function
 
 ' Build information for a single border side
-Private Function BuildBorderSide(ByVal border As border) As String
+Private Function BuildBorderSide(ByVal bd As border) As String
     Dim sb As String
     sb = "{"
-    sb = sb & Q("style") & ":" & Q(GetBorderStyleName(border.lineStyle)) & ","
-    sb = sb & Q("color") & ":" & Q(RGBToHex(border.Color)) & ","
-    sb = sb & Q("weight") & ":" & CNum(border.Weight)
+    sb = sb & Q("style") & ":" & Q(GetBorderStyleName(bd.lineStyle)) & ","
+    sb = sb & Q("color") & ":" & Q(RGBToHex(bd.Color)) & ","
+    sb = sb & Q("weight") & ":" & CNum(bd.Weight)
     sb = sb & "}"
     
     BuildBorderSide = sb
+End Function
+
+' 新增：获取单条边框的样式信息
+Private Function BuildBorderSideInfo(ByVal cell As Range, ByVal which As XlBordersIndex) As String
+    On Error Resume Next
+    
+    Dim src As Range
+    If cell.MergeCells Then
+        Set src = cell.MergeArea.Cells(1, 1)
+    Else
+        Set src = cell
+    End If
+    
+    Dim bd As border  ' 重命名避免与类型名冲突
+    Dim sb As String
+    
+    ' 优先使用DisplayFormat，失败则使用普通Borders
+    If src.DisplayFormat.Borders(which).lineStyle <> xlLineStyleNone Then
+        Set bd = src.DisplayFormat.Borders(which)
+    ElseIf src.Borders(which).lineStyle <> xlLineStyleNone Then
+        Set bd = src.Borders(which)
+    Else
+        ' 如果本格没有，检查相邻格
+        Dim ws As Worksheet
+        Set ws = cell.Worksheet
+        Dim r As Long, c As Long
+        r = cell.Row: c = cell.Column
+        
+        Select Case which
+            Case xlEdgeTop
+                If r > 1 Then
+                    Set bd = ws.Cells(r - 1, c).DisplayFormat.Borders(xlEdgeBottom)
+                    If bd.lineStyle = xlLineStyleNone Then
+                        Set bd = ws.Cells(r - 1, c).Borders(xlEdgeBottom)
+                    End If
+                End If
+            Case xlEdgeBottom
+                If r < ws.Rows.Count Then
+                    Set bd = ws.Cells(r + 1, c).DisplayFormat.Borders(xlEdgeTop)
+                    If bd.lineStyle = xlLineStyleNone Then
+                        Set bd = ws.Cells(r + 1, c).Borders(xlEdgeTop)
+                    End If
+                End If
+            Case xlEdgeLeft
+                If c > 1 Then
+                    Set bd = ws.Cells(r, c - 1).DisplayFormat.Borders(xlEdgeRight)
+                    If bd.lineStyle = xlLineStyleNone Then
+                        Set bd = ws.Cells(r, c - 1).Borders(xlEdgeRight)
+                    End If
+                End If
+            Case xlEdgeRight
+                If c < ws.Columns.Count Then
+                    Set bd = ws.Cells(r, c + 1).DisplayFormat.Borders(xlEdgeLeft)
+                    If bd.lineStyle = xlLineStyleNone Then
+                        Set bd = ws.Cells(r, c + 1).Borders(xlEdgeLeft)
+                    End If
+                End If
+        End Select
+    End If
+    
+    ' 构建样式信息 - 添加安全检查
+    sb = "{"
+    If Not bd Is Nothing Then
+        sb = sb & Q("style") & ":" & Q(GetBorderStyleName(bd.lineStyle)) & ","
+        sb = sb & Q("weightPt") & ":" & CNumD(bd.Weight) & ","
+        sb = sb & Q("colorRGB") & ":" & Q(RGBToHex(bd.Color))
+    Else
+        ' 如果找不到边框，使用默认值
+        sb = sb & Q("style") & ":" & Q("Continuous") & ","
+        sb = sb & Q("weightPt") & ":" & CNumD(1) & ","
+        sb = sb & Q("colorRGB") & ":" & Q("#000000")
+    End If
+    sb = sb & "}"
+    
+    BuildBorderSideInfo = sb
+    
+    On Error GoTo 0
 End Function
 
 ' Get border style name
 Private Function GetBorderStyleName(ByVal lineStyle As Long) As String
     Select Case lineStyle
         Case xlLineStyleNone: GetBorderStyleName = "none"
-        Case xlContinuous: GetBorderStyleName = "solid"
-        Case xlDash: GetBorderStyleName = "dash"
-        Case xlDashDot: GetBorderStyleName = "dashDot"
-        Case xlDashDotDot: GetBorderStyleName = "dashDotDot"
-        Case xlDot: GetBorderStyleName = "dot"
-        Case xlDouble: GetBorderStyleName = "double"
-        Case xlSlantDashDot: GetBorderStyleName = "slantDashDot"
-        Case Else: GetBorderStyleName = "solid"
+        Case xlContinuous: GetBorderStyleName = "Continuous"
+        Case xlDash: GetBorderStyleName = "Dash"
+        Case xlDashDot: GetBorderStyleName = "DashDot"
+        Case xlDashDotDot: GetBorderStyleName = "DashDotDot"
+        Case xlDot: GetBorderStyleName = "Dot"
+        Case xlDouble: GetBorderStyleName = "Double"
+        Case xlSlantDashDot: GetBorderStyleName = "SlantDashDot"
+        Case Else: GetBorderStyleName = "Continuous"
     End Select
 End Function
 
