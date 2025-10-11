@@ -7,11 +7,24 @@ export function getApiBaseUrl() {
     return 'http://localhost:3001';
   }
   
-  // 生产环境：自动使用当前IP地址的3001端口
+  // 生产环境：检查是否有自定义API地址
+  const customApiUrl = window.FLUIDDAM_API_URL || process.env.REACT_APP_API_URL;
+  if (customApiUrl) {
+    return customApiUrl;
+  }
+  
+  // 生产环境：使用相对路径，让Nginx处理路由
   const protocol = window.location.protocol;
   const hostname = window.location.hostname;
+  const port = window.location.port;
   
-  // API服务器始终在同一个IP地址的3001端口
+  // 如果使用Nginx反向代理，API路径应该通过Nginx路由到后端
+  // 检查是否在标准端口（80/443）上运行
+  if (port === '' || port === '80' || port === '443') {
+    return `${protocol}//${hostname}/api`;
+  }
+  
+  // 否则使用当前主机和3001端口
   return `${protocol}//${hostname}:3001`;
 }
 

@@ -424,7 +424,7 @@ export default function InsertImageButton({ editor, selectedFrame }) {
            justifyContent: "center"
          }}
         >
-          <img src="/src/assets/load_image.png" alt="插入图片" style={{width: 32, height: 32}} />
+          <img src="/icons/load_image.png" alt="插入图片" style={{width: 32, height: 32}} />
         </button>
 
       {/* 拖拽区域 */}

@@ -9,6 +9,138 @@ const __dirname = path.dirname(__filename)
 const app = express()
 const PORT = 3001
 
+// 创建日志目录
+const logsDir = path.join(__dirname, 'logs')
+if (!fs.existsSync(logsDir)) {
+  fs.mkdirSync(logsDir, { recursive: true })
+}
+
+// 日志配置
+const logFile = path.join(logsDir, `server-${new Date().toISOString().split('T')[0]}.log`)
+const errorLogFile = path.join(logsDir, `error-${new Date().toISOString().split('T')[0]}.log`)
+
+// 日志函数 - 友好格式
+function log(level, message, data = null) {
+  const timestamp = new Date().toISOString()
+  const time = new Date().toLocaleString('zh-CN')
+  
+  // 创建友好的日志格式
+  let friendlyEntry = `[${time}] [${level}] ${message}`
+  
+  if (data) {
+    // 格式化数据为更友好的格式
+    if (typeof data === 'object') {
+      const friendlyData = formatLogData(data)
+      if (friendlyData) {
+        friendlyEntry += `\n    ${friendlyData}`
+      }
+    } else {
+      friendlyEntry += `\n    数据: ${data}`
+    }
+  }
+  
+  friendlyEntry += '\n'
+  
+  // 输出到控制台
+  console.log(friendlyEntry.trim())
+  
+  // 写入日志文件
+  fs.appendFileSync(logFile, friendlyEntry)
+  
+  // 错误级别写入错误日志
+  if (level === 'ERROR') {
+    fs.appendFileSync(errorLogFile, friendlyEntry)
+  }
+}
+
+// 格式化日志数据为友好格式
+function formatLogData(data) {
+  const lines = []
+  
+  if (data.port) {
+    lines.push(`端口: ${data.port}`)
+  }
+  if (data.logsDir) {
+    lines.push(`日志目录: ${data.logsDir}`)
+  }
+  if (data.fileName) {
+    lines.push(`文件名: ${data.fileName}`)
+  }
+  if (data.totalImages !== undefined) {
+    lines.push(`图片总数: ${data.totalImages}`)
+  }
+  if (data.shareId) {
+    lines.push(`分享ID: ${data.shareId}`)
+  }
+  if (data.shareUrl) {
+    lines.push(`分享链接: ${data.shareUrl}`)
+  }
+  if (data.dataSize) {
+    lines.push(`数据大小: ${formatBytes(data.dataSize)}`)
+  }
+  if (data.duration) {
+    lines.push(`处理时间: ${data.duration}`)
+  }
+  if (data.status) {
+    lines.push(`状态码: ${data.status}`)
+  }
+  if (data.ip) {
+    lines.push(`IP地址: ${data.ip}`)
+  }
+  if (data.userAgent) {
+    lines.push(`浏览器: ${data.userAgent.split(' ')[0]}`)
+  }
+  if (data.error) {
+    lines.push(`错误信息: ${data.error}`)
+  }
+  if (data.stack) {
+    lines.push(`错误堆栈: ${data.stack.split('\n')[0]}`)
+  }
+  
+  return lines.length > 0 ? lines.join(' | ') : null
+}
+
+// 格式化字节大小
+function formatBytes(bytes) {
+  if (bytes === 0) return '0 B'
+  const k = 1024
+  const sizes = ['B', 'KB', 'MB', 'GB']
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+}
+
+// 请求日志中间件
+app.use((req, res, next) => {
+  const start = Date.now()
+  
+  // 记录请求
+  log('INFO', `Request: ${req.method} ${req.url}`, {
+    ip: req.ip,
+    userAgent: req.get('User-Agent'),
+    referer: req.get('Referer')
+  })
+  
+  // 监听响应完成
+  res.on('finish', () => {
+    const duration = Date.now() - start
+    const status = res.statusCode
+    
+    if (status >= 400) {
+      log('ERROR', `Response: ${req.method} ${req.url} - ${status}`, {
+        duration: `${duration}ms`,
+        status: status
+      })
+    } else {
+      log('INFO', `Response: ${req.method} ${req.url} - ${status}`, {
+        duration: `${duration}ms`,
+        status: status
+      })
+    }
+  })
+  
+  next()
+})
+
 // CORS中间件
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*')
@@ -26,6 +158,7 @@ app.use((req, res, next) => {
 app.use(express.json({ limit: '50mb' })) // 增加JSON解析限制到50MB
 app.use(express.urlencoded({ limit: '50mb', extended: true })) // 增加URL编码限制
 app.use(express.static('public'))
+app.use(express.static('.')) // 添加当前目录作为静态文件服务
 
 // 创建分享文件夹
 const sharesDir = path.join(__dirname, 'public', 'shares')
@@ -132,10 +265,10 @@ app.post('/api/save-image-data', (req, res) => {
     // 保存到文件
     fs.writeFileSync(databasePath, JSON.stringify(database, null, 2))
     
-    console.log('图片数据已保存到文件:', imageData.fileName)
+    log('INFO', '图片数据已保存到文件', { fileName: imageData.fileName, totalImages: database.totalImages })
     res.json({ success: true, message: '数据保存成功', totalImages: database.totalImages })
   } catch (error) {
-    console.error('保存数据时出错:', error)
+    log('ERROR', '保存数据时出错', { error: error.message, stack: error.stack })
     res.status(500).json({ success: false, message: '保存失败', error: error.message })
   }
 })
@@ -189,26 +322,36 @@ app.post('/api/share-canvas', (req, res) => {
     // 保存分享文件
     fs.writeFileSync(filePath, JSON.stringify(shareData, null, 2))
     
-    // 生成分享链接 - 直接指向前端应用
+    // 生成分享链接 - 支持Nginx反向代理
     const protocol = req.protocol;
     const host = req.get('host');
     
-    // 动态获取前端端口，优先从请求头获取，否则使用默认5173
-    let frontendPort = '5173';
-    const referer = req.get('referer');
-    if (referer) {
-      try {
-        const refererUrl = new URL(referer);
-        frontendPort = refererUrl.port || '5173';
-      } catch (e) {
-        // 如果解析失败，使用默认端口
+    // 检查是否通过Nginx反向代理访问
+    const xForwardedHost = req.get('x-forwarded-host');
+    const xForwardedProto = req.get('x-forwarded-proto');
+    
+    let shareUrl;
+    if (xForwardedHost && xForwardedProto) {
+      // 使用Nginx反向代理的地址
+      shareUrl = `${xForwardedProto}://${xForwardedHost}/?share=${shareId}`;
+    } else {
+      // 直接访问，动态获取前端端口
+      let frontendPort = '5173';
+      const referer = req.get('referer');
+      if (referer) {
+        try {
+          const refererUrl = new URL(referer);
+          frontendPort = refererUrl.port || '5173';
+        } catch (e) {
+          // 如果解析失败，使用默认端口
+        }
       }
+      
+      const frontendHost = host.replace(':3001', `:${frontendPort}`);
+      shareUrl = `${protocol}://${frontendHost}/?share=${shareId}`;
     }
     
-    const frontendHost = host.replace(':3001', `:${frontendPort}`);
-    const shareUrl = `${protocol}://${frontendHost}/?share=${shareId}`
-    
-    console.log('画布分享成功:', shareId, '链接:', shareUrl)
+    log('INFO', '画布分享成功', { shareId, shareUrl, dataSize: JSON.stringify(canvasData).length })
     
     res.json({ 
       success: true, 
@@ -217,7 +360,7 @@ app.post('/api/share-canvas', (req, res) => {
       message: '分享成功' 
     })
   } catch (error) {
-    console.error('分享画布时出错:', error)
+    log('ERROR', '分享画布时出错', { error: error.message, stack: error.stack, canvasDataSize: JSON.stringify(canvasData).length })
     res.status(500).json({ success: false, message: '分享失败', error: error.message })
   }
 })
@@ -312,10 +455,187 @@ app.get('/api/shares-stats', (req, res) => {
   }
 });
 
+// 远程日志查看API
+app.get('/api/logs', (req, res) => {
+  try {
+    const logType = req.query.type || 'server';
+    const lines = parseInt(req.query.lines) || 100;
+    const date = req.query.date || new Date().toISOString().split('T')[0];
+    const search = req.query.search || '';
+    const format = req.query.format || 'friendly'; // 新增格式参数
+    
+    const logFile = path.join(logsDir, `${logType}-${date}.log`);
+    
+    if (!fs.existsSync(logFile)) {
+      return res.json({ 
+        success: false, 
+        message: `日志文件不存在: ${logType}-${date}.log`,
+        availableFiles: fs.readdirSync(logsDir).filter(f => f.endsWith('.log'))
+      });
+    }
+    
+    let content = fs.readFileSync(logFile, 'utf8');
+    let logLines = content.split('\n').filter(line => line.trim());
+    
+    // 如果指定了搜索条件
+    if (search) {
+      logLines = logLines.filter(line => 
+        line.toLowerCase().includes(search.toLowerCase())
+      );
+    }
+    
+    // 限制返回行数
+    if (lines > 0) {
+      logLines = logLines.slice(-lines);
+    }
+    
+    // 如果请求友好格式，转换日志
+    if (format === 'friendly') {
+      logLines = logLines.map(line => convertLogLineToFriendly(line));
+    }
+    
+    res.json({
+      success: true,
+      logs: logLines,
+      totalLines: content.split('\n').length,
+      filteredLines: logLines.length,
+      file: path.basename(logFile),
+      date: date,
+      search: search,
+      format: format
+    });
+  } catch (error) {
+    log('ERROR', '获取日志时出错', { error: error.message, stack: error.stack });
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// 转换日志行为友好格式
+function convertLogLineToFriendly(line) {
+  // 解析原始日志格式
+  const timestampMatch = line.match(/\[([^\]]+)\]/);
+  const levelMatch = line.match(/\[([A-Z]+)\]/);
+  const messageMatch = line.match(/\]\s+(.+?)(?:\s+\|.*)?$/);
+  
+  if (!timestampMatch || !levelMatch || !messageMatch) {
+    return line; // 如果无法解析，返回原行
+  }
+  
+  const timestamp = timestampMatch[1];
+  const level = levelMatch[1];
+  const message = messageMatch[1];
+  
+  // 转换时间格式
+  const friendlyTime = new Date(timestamp).toLocaleString('zh-CN');
+  
+  // 创建友好格式
+  let friendlyLine = `[${friendlyTime}] [${level}] ${message}`;
+  
+  // 解析数据部分
+  const dataMatch = line.match(/\|\s*Data:\s*(.+)$/);
+  if (dataMatch) {
+    try {
+      const data = JSON.parse(dataMatch[1]);
+      const friendlyData = formatLogData(data);
+      if (friendlyData) {
+        friendlyLine += `\n    ${friendlyData}`;
+      }
+    } catch (e) {
+      // 如果JSON解析失败，保留原始数据
+      friendlyLine += `\n    数据: ${dataMatch[1]}`;
+    }
+  }
+  
+  return friendlyLine;
+}
+
+// 获取日志统计信息
+app.get('/api/logs/stats', (req, res) => {
+  try {
+    const date = req.query.date || new Date().toISOString().split('T')[0];
+    const serverLogFile = path.join(logsDir, `server-${date}.log`);
+    const errorLogFile = path.join(logsDir, `error-${date}.log`);
+    
+    let stats = {
+      date: date,
+      serverLog: {
+        exists: fs.existsSync(serverLogFile),
+        lines: 0,
+        size: 0
+      },
+      errorLog: {
+        exists: fs.existsSync(errorLogFile),
+        lines: 0,
+        size: 0
+      },
+      shareStats: {
+        success: 0,
+        failed: 0,
+        successRate: 0
+      }
+    };
+    
+    // 统计服务器日志
+    if (stats.serverLog.exists) {
+      const content = fs.readFileSync(serverLogFile, 'utf8');
+      stats.serverLog.lines = content.split('\n').length;
+      stats.serverLog.size = fs.statSync(serverLogFile).size;
+      
+      // 统计分享相关数据
+      const shareSuccess = (content.match(/画布分享成功/g) || []).length;
+      const shareFailed = (content.match(/分享画布时出错/g) || []).length;
+      
+      stats.shareStats.success = shareSuccess;
+      stats.shareStats.failed = shareFailed;
+      stats.shareStats.successRate = shareSuccess + shareFailed > 0 
+        ? Math.round((shareSuccess / (shareSuccess + shareFailed)) * 100) 
+        : 0;
+    }
+    
+    // 统计错误日志
+    if (stats.errorLog.exists) {
+      const content = fs.readFileSync(errorLogFile, 'utf8');
+      stats.errorLog.lines = content.split('\n').length;
+      stats.errorLog.size = fs.statSync(errorLogFile).size;
+    }
+    
+    res.json({ success: true, stats });
+  } catch (error) {
+    log('ERROR', '获取日志统计时出错', { error: error.message, stack: error.stack });
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// 获取可用的日志文件列表
+app.get('/api/logs/files', (req, res) => {
+  try {
+    const files = fs.readdirSync(logsDir)
+      .filter(file => file.endsWith('.log'))
+      .map(file => {
+        const filePath = path.join(logsDir, file);
+        const stats = fs.statSync(filePath);
+        return {
+          name: file,
+          size: stats.size,
+          modified: stats.mtime,
+          type: file.startsWith('server-') ? 'server' : 
+                file.startsWith('error-') ? 'error' : 'other'
+        };
+      })
+      .sort((a, b) => b.modified - a.modified);
+    
+    res.json({ success: true, files });
+  } catch (error) {
+    log('ERROR', '获取日志文件列表时出错', { error: error.message, stack: error.stack });
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
 // 注意：分享链接现在直接指向前端应用，不再需要重定向路由
 
-
-
 app.listen(PORT, () => {
+  log('INFO', `服务器启动`, { port: PORT, logsDir: logsDir });
   console.log(`服务器运行在 http://localhost:${PORT}`)
+  console.log(`业务日志查看器: http://localhost:${PORT}/business-log-viewer.html`)
+  console.log(`基础日志查看器: http://localhost:${PORT}/log-viewer.html`)
 })
