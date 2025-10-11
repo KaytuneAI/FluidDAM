@@ -113,9 +113,13 @@ function formatBytes(bytes) {
 app.use((req, res, next) => {
   const start = Date.now()
   
-  // 记录请求
+  // 记录请求 - 改进IP地址获取
+  const clientIP = req.ip || req.connection.remoteAddress || req.socket.remoteAddress || 
+                   (req.connection.socket ? req.connection.socket.remoteAddress : null) ||
+                   req.headers['x-forwarded-for'] || req.headers['x-real-ip'] || 'unknown'
+  
   log('INFO', `Request: ${req.method} ${req.url}`, {
-    ip: req.ip,
+    ip: clientIP,
     userAgent: req.get('User-Agent'),
     referer: req.get('Referer')
   })

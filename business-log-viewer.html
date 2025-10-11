@@ -392,9 +392,18 @@
                 let level = levelMatch ? levelMatch[1] : 'INFO';
                 let message = messageMatch ? messageMatch[1] : line;
                 
-                // 提取IP地址
-                const ipMatch = line.match(/IP地址:\s*([^|]+)/);
-                const ip = ipMatch ? ipMatch[1] : '';
+                // 提取IP地址 - 改进正则表达式，支持多种格式
+                let ip = '';
+                const ipMatch1 = line.match(/IP地址:\s*([^\s|]+)/);
+                const ipMatch2 = line.match(/ip:\s*([^\s|]+)/);
+                const ipMatch3 = line.match(/IP:\s*([^\s|]+)/);
+                
+                if (ipMatch1) ip = ipMatch1[1].trim();
+                else if (ipMatch2) ip = ipMatch2[1].trim();
+                else if (ipMatch3) ip = ipMatch3[1].trim();
+                
+                // 处理IPv6 localhost地址
+                if (ip === '::1') ip = 'localhost';
                 
                 // 提取操作类型
                 let action = this.extractAction(message);
@@ -487,7 +496,7 @@
                 return `
                     <div class="log-entry">
                         <div class="log-time">${parsed.timestamp}</div>
-                        <div class="log-ip">${parsed.ip || '-'}</div>
+                        <div class="log-ip">${parsed.ip || '本地访问'}</div>
                         <div class="log-action ${parsed.actionClass}">${action}</div>
                         <div class="log-details">${detailsHtml}</div>
                     </div>
