@@ -12,18 +12,10 @@ export default defineConfig({
     allowedHosts: ['liquora.cn']
   },
   build: {
-    chunkSizeWarningLimit: 1500, // 临时放宽限制
+    chunkSizeWarningLimit: 2000, // 放宽限制
     rollupOptions: {
       output: {
-        manualChunks(id) {
-          if (id.includes('node_modules')) {
-            if (id.includes('tldraw')) return 'vendor-tldraw'
-            if (id.includes('xlsx') || id.includes('exceljs')) return 'vendor-excel'
-            if (id.includes('react') || id.includes('react-dom') || id.includes('scheduler')) return 'vendor-react'
-            return 'vendor'
-          }
-          if (id.includes('/src/utils/')) return 'utils'
-        },
+        manualChunks: undefined // 禁用chunk分割，确保React正常工作
       },
     },
   },
@@ -31,6 +23,13 @@ export default defineConfig({
     alias: {
       'react': 'react',
       'react-dom': 'react-dom'
-    }
+    },
+    dedupe: ['react', 'react-dom']
+  },
+  optimizeDeps: {
+    include: ['react', 'react-dom', 'react/jsx-runtime']
+  },
+  define: {
+    'process.env.NODE_ENV': '"production"'
   },
 })
