@@ -14,11 +14,19 @@ echo ============================================
 
 REM --- Stop existing process ---
 echo [INFO] Stopping existing FluidDAM process...
-for /f "tokens=5" %%a in ('netstat -ano ^| findstr :%PORT% ^| findstr LISTENING') do set PID=%%a
+set PID=
+for /f "tokens=5" %%a in ('netstat -ano ^| findstr :%PORT% ^| findstr LISTENING 2^>nul') do set PID=%%a
 if defined PID (
   echo [INFO] Found existing process (PID %PID%), stopping...
   taskkill /F /PID %PID% >nul 2>&1
+  if %errorlevel%==0 (
+    echo [OK] Process stopped successfully
+  ) else (
+    echo [WARN] Failed to stop process, continuing...
+  )
   timeout /t 2 /nobreak >nul
+) else (
+  echo [INFO] No existing process found on port %PORT%
 )
 
 REM --- Start new process ---
