@@ -527,7 +527,9 @@ Private Function CellsToJsonSparse(ByVal ws As Worksheet, ByRef nonEmptyCount As
                           ",""w"":" & CNumD(mergeArea.Width * pt2px) & _
                           ",""h"":" & CNumD(mergeArea.Height * pt2px) & _
                           ",""v"":""" & EscapeJson(CStr(v)) & """," & _
-                          """fillColor"":""" & GetCellFillColor(representativeCell) & """}"
+                          """fillColor"":""" & GetCellFillColor(representativeCell) & """," & _
+                          """hAlign"":""" & GetCellHAlign(representativeCell) & """," & _
+                          """vAlign"":""" & GetCellVAlign(representativeCell) & """}"
                 
                 nonEmptyCount = nonEmptyCount + 1
             End If

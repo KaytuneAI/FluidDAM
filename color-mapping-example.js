@@ -69,6 +69,11 @@ function mapExcelColorToTldraw(colorInfo) {
     const g = (displayColor >> 8) & 0xFF;
     const b = (displayColor >> 16) & 0xFF;
     
+    // 纯白色检查 - 纯白色(#FFFFFF)始终映射为白色
+    if (r === 255 && g === 255 && b === 255) {
+        return "white";
+    }
+    
     // 找到最接近的TLdraw颜色
     let minDistance = Infinity;
     let closestColor = "black";
@@ -202,3 +207,4 @@ export {
     processBorderColors,
     processLayoutColors
 };
+

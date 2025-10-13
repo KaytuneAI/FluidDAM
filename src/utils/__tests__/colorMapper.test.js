@@ -139,3 +139,4 @@ describe('mapExcelColorToTL', () => {
     expect(mapExcelColorToTL('#DC143C')).toBe('red'); // Crimson
   });
 });
+

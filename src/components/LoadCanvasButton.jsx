@@ -469,6 +469,13 @@ export default function LoadCanvasButton({ editor, setIsLoading }) {
     }
 
     // 4. 首先创建所有单元格背景色（最底层，Z-order = -1000）
+    console.log('🔍 检查layoutData结构:', {
+      hasSheet: !!layoutData.sheet,
+      hasCells: !!(layoutData.sheet && layoutData.sheet.cells),
+      cellsLength: layoutData.sheet?.cells?.length || 0,
+      layoutDataKeys: Object.keys(layoutData)
+    });
+    
     if (layoutData.sheet && layoutData.sheet.cells) {
       console.log('开始创建单元格背景色（最底层）:', layoutData.sheet.cells.length);
       
@@ -492,13 +499,12 @@ export default function LoadCanvasButton({ editor, setIsLoading }) {
           const finalColor = tlColor;
           
           // 调试信息：显示单元格颜色映射结果
-          if (cell.fillColor && cell.fillColor !== '#FFFFFF') {
-            console.log('🎨 单元格颜色映射:', {
-              原始颜色: cell.fillColor,
-              映射颜色: finalColor,
-              填充模式: finalColor === 'none' ? 'none' : 'solid'
-            });
-          }
+          console.log('🎨 单元格颜色映射:', {
+            内容: cell.v || '无内容',
+            原始颜色: cell.fillColor || '无背景色',
+            映射颜色: finalColor,
+            填充模式: finalColor === 'none' ? 'none' : 'solid'
+          });
           
           // 创建单元格背景色（最底层，Z-order = -1000）
           if (finalColor !== 'none') {

@@ -31,3 +31,4 @@
 - 确保XLAM文件中的VBA代码与 `Module1.bas` 完全一致
 - 特别是新增的颜色处理函数：`BuildColorInfo`, `GetCellFillColor`, `TestActualColorOutput`
 - 检查JSON格式的颜色输出是否正确
+

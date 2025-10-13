@@ -23,6 +23,11 @@ export function mapExcelColorToTL(colorInput, options = {}) {
 
   const { h, s, l } = rgbToHsl(r, g, b);
 
+  // 纯白色检查 - 纯白色(#FFFFFF)始终映射为白色
+  if (r === 255 && g === 255 && b === 255) {
+    return 'white';
+  }
+
   // 近白
   if (l >= lightnessAsWhite) {
     return forceVeryLightToGrey ? 'grey' : 'white';
