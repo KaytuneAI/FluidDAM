@@ -13,9 +13,7 @@ echo FluidDAM Full Stop Script
 echo ============================================
 
 REM --- Stop Node.js ---
-for /f "tokens=5" %%a in ('netstat -ano ^| findstr :%PORT% ^| findstr LISTENING') do (
-  set PID=%%a
-)
+for /f "tokens=5" %%a in ('netstat -ano ^| findstr :%PORT% ^| findstr LISTENING') do set PID=%%a
 if defined PID (
   echo [INFO] Found Node process on port %PORT% (PID %PID%)
   taskkill /F /PID %PID% >nul 2>&1

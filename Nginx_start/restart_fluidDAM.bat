@@ -14,9 +14,7 @@ echo ============================================
 
 REM --- Stop existing process ---
 echo [INFO] Stopping existing FluidDAM process...
-for /f "tokens=5" %%a in ('netstat -ano ^| findstr :%PORT% ^| findstr LISTENING') do (
-  set PID=%%a
-)
+for /f "tokens=5" %%a in ('netstat -ano ^| findstr :%PORT% ^| findstr LISTENING') do set PID=%%a
 if defined PID (
   echo [INFO] Found existing process (PID %PID%), stopping...
   taskkill /F /PID %PID% >nul 2>&1
