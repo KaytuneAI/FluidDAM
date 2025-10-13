@@ -32,8 +32,7 @@ Public Sub OpenDocs_OnAction(control As IRibbonControl)
 End Sub
 
 Public Sub About_OnAction(control As IRibbonControl)
-    MsgBox "FluidDAM for Excel" & vbCrLf & _
-           "Pro (Safe UI)" & vbCrLf & "? 2025 Kaytune", vbInformation, "关于"
+    MsgBox "FluidDAM for Excel" & vbCrLf & "Pro (Safe UI)" & vbCrLf & "? 2025 Kaytune", vbInformation, "关于"
 End Sub
 
 
@@ -82,13 +81,7 @@ Public Sub ExportLayoutWin()
         actionMsg = "New export added for sheet: " & ws.Name & " (Row " & targetRow & ")"
     End If
 
-    MsgBox actionMsg & vbCrLf & _
-           "Target sheet: " & tgt.Name & vbCrLf & _
-           "Workbook: " & wb.Name & vbCrLf & _
-           "Cells (non-empty): " & outCells & vbCrLf & _
-           "Textboxes: " & outText & vbCrLf & _
-           "Images: " & outPics & vbCrLf & _
-           "Borders: " & outBorders, vbInformation, "Layout export OK"
+    MsgBox actionMsg & vbCrLf & "Target sheet: " & tgt.Name & vbCrLf & "Workbook: " & wb.Name & vbCrLf & "Cells (non-empty): " & outCells & vbCrLf & "Textboxes: " & outText & vbCrLf & "Images: " & outPics & vbCrLf & "Borders: " & outBorders, vbInformation, "Layout export OK"
     Exit Sub
 
 FAIL:
@@ -160,10 +153,7 @@ Public Sub ListAllPictures()
     Debug.Print "=== All Picture Information in Current Worksheet ==="
     For Each shp In ws.Shapes
         If shp.Type = msoPicture Or shp.Type = msoLinkedPicture Then
-            Debug.Print i & ". Name: " & shp.Name & _
-                       " | Left: " & Round(shp.Left, 2) & _
-                       " | Top: " & Round(shp.Top, 2) & _
-                       " | Z: " & shp.ZOrderPosition
+            Debug.Print i & ". Name: " & shp.Name & " | Left: " & Round(shp.Left, 2) & " | Top: " & Round(shp.Top, 2) & " | Z: " & shp.ZOrderPosition
             i = i + 1
         End If
     Next shp
@@ -227,9 +217,7 @@ Public Sub ListAllBorders()
         Next c
     Next r
     
-    MsgBox "Enhanced border detection completed!" & vbCrLf & _
-           "Checked " & totalChecked & " cells, found " & borderCount & " cells with borders" & vbCrLf & _
-           "Detailed information has been output to immediate window, press Ctrl+G to view", vbInformation
+    MsgBox "Enhanced border detection completed!" & vbCrLf & "Checked " & totalChecked & " cells, found " & borderCount & " cells with borders" & vbCrLf & "Detailed information has been output to immediate window, press Ctrl+G to view", vbInformation
 End Sub
 
 ' 新增：专门测试2x2样本和合并单元格的测试函数
@@ -384,6 +372,364 @@ Public Sub TestBasic()
     MsgBox "Basic test completed!"
 End Sub
 
+' 测试隐藏单元格过滤功能
+Public Sub TestHiddenCells()
+    Dim ws As Worksheet
+    Set ws = ActiveSheet
+    
+    Debug.Print "=== Hidden Cells Test ==="
+    
+    ' 测试隐藏单元格检测
+    Dim testCell As Range
+    Set testCell = ws.Range("A1")
+    
+    Debug.Print "Testing cell A1:"
+    Debug.Print "  IsHidden: " & IsCellHidden(testCell)
+    Debug.Print "  Row Hidden: " & testCell.EntireRow.Hidden
+    Debug.Print "  Column Hidden: " & testCell.EntireColumn.Hidden
+    
+    ' 测试隐藏行
+    If ws.Rows.Count >= 2 Then
+        Set testCell = ws.Range("A2")
+        Debug.Print "Testing cell A2:"
+        Debug.Print "  IsHidden: " & IsCellHidden(testCell)
+        Debug.Print "  Row Hidden: " & testCell.EntireRow.Hidden
+    End If
+    
+    ' 测试隐藏列
+    If ws.Columns.Count >= 2 Then
+        Set testCell = ws.Range("B1")
+        Debug.Print "Testing cell B1:"
+        Debug.Print "  IsHidden: " & IsCellHidden(testCell)
+        Debug.Print "  Column Hidden: " & testCell.EntireColumn.Hidden
+    End If
+    
+    MsgBox "Hidden cells test completed! Check immediate window for results.", vbInformation
+End Sub
+
+' 测试背景色处理功能
+Public Sub TestBackgroundColors()
+    Dim ws As Worksheet
+    Set ws = ActiveSheet
+    
+    Debug.Print "=== Background Colors Test ==="
+    
+    ' 测试几个单元格的背景色
+    Dim testCells As Variant
+    testCells = Array("A1", "B1", "C1", "A2", "B2", "C2")
+    
+    Dim i As Long
+    For i = 0 To UBound(testCells)
+        Dim cell As Range
+        Set cell = ws.Range(testCells(i))
+        
+        Debug.Print "Cell " & testCells(i) & ":"
+        Debug.Print "  Interior.Color: " & cell.Interior.Color
+        Debug.Print "  Interior.ColorIndex: " & cell.Interior.ColorIndex
+        Debug.Print "  DisplayFormat.Interior.Color: " & cell.DisplayFormat.Interior.Color
+        Debug.Print "  GetCellFillColor: " & GetCellFillColor(cell)
+        Debug.Print "  RGBToHex(Interior.Color): " & RGBToHex(cell.Interior.Color)
+        Debug.Print "  RGBToHex(DisplayFormat.Color): " & RGBToHex(cell.DisplayFormat.Interior.Color)
+        Debug.Print "  ---"
+    Next i
+    
+    MsgBox "Background colors test completed! Check immediate window for results.", vbInformation
+End Sub
+
+' 专门测试土黄色背景色问题
+Public Sub TestYellowBackground()
+    Dim ws As Worksheet
+    Set ws = ActiveSheet
+    
+    Debug.Print "=== Yellow Background Test ==="
+    
+    ' 测试常见的土黄色值
+    Dim yellowColors As Variant
+    yellowColors = Array(65535, 16776960, 16777088, 16777164, 16777200)  ' 各种黄色值
+    
+    Debug.Print "Testing common yellow color values:"
+    Dim i As Long
+    For i = 0 To UBound(yellowColors)
+        Debug.Print "Color value " & yellowColors(i) & ":"
+        Debug.Print "  RGBToHex: " & RGBToHex(yellowColors(i))
+        Debug.Print "  ---"
+    Next i
+    
+    ' 测试当前选中单元格的颜色
+    Dim selectedCell As Range
+    Set selectedCell = Selection
+    
+    Debug.Print "Selected cell " & selectedCell.Address & ":"
+    Debug.Print "  Interior.Color: " & selectedCell.Interior.Color
+    Debug.Print "  Interior.ColorIndex: " & selectedCell.Interior.ColorIndex
+    Debug.Print "  DisplayFormat.Interior.Color: " & selectedCell.DisplayFormat.Interior.Color
+    Debug.Print "  GetCellFillColor result: " & GetCellFillColor(selectedCell)
+    Debug.Print "  RGBToHex(Interior.Color): " & RGBToHex(selectedCell.Interior.Color)
+    Debug.Print "  RGBToHex(DisplayFormat.Color): " & RGBToHex(selectedCell.DisplayFormat.Interior.Color)
+    
+    ' 检查是否是土黄色
+    Dim colorValue As Long
+    colorValue = selectedCell.DisplayFormat.Interior.Color
+    If colorValue <> -4142 And colorValue <> 16777215 Then
+        Debug.Print "  This cell HAS a background color!"
+        Debug.Print "  Color analysis:"
+        Dim r As Long, g As Long, b As Long
+        r = (colorValue And &HFF)
+        g = (colorValue \ &H100) And &HFF
+        b = (colorValue \ &H10000) And &HFF
+        Debug.Print "    R: " & r & ", G: " & g & ", B: " & b
+        Debug.Print "    Is yellow-ish: " & (r > g And g > b And r > 200)
+    Else
+        Debug.Print "  This cell has NO background color (transparent/white)"
+    End If
+    
+    MsgBox "Yellow background test completed! Check immediate window for results.", vbInformation
+End Sub
+
+' 创建测试土黄色单元格
+Public Sub CreateYellowTest()
+    Dim ws As Worksheet
+    Set ws = ActiveSheet
+    
+    ' 清除A1:C3区域
+    ws.Range("A1:C3").Clear
+    
+    ' 设置不同的土黄色背景
+    ws.Range("A1").Interior.Color = 65535        ' 纯黄色
+    ws.Range("A1").Value = "Pure Yellow"
+    
+    ws.Range("B1").Interior.Color = 16776960     ' 土黄色1
+    ws.Range("B1").Value = "Yellow 1"
+    
+    ws.Range("C1").Interior.Color = 16777088     ' 土黄色2
+    ws.Range("C1").Value = "Yellow 2"
+    
+    ws.Range("A2").Interior.Color = 16777164    ' 土黄色3
+    ws.Range("A2").Value = "Yellow 3"
+    
+    ws.Range("B2").Interior.Color = 16777200     ' 土黄色4
+    ws.Range("B2").Value = "Yellow 4"
+    
+    ' 测试无内容的土黄色单元格
+    ws.Range("C2").Interior.Color = 16777000
+    ' 不设置Value，测试无内容但有背景色的情况
+    
+    MsgBox "Yellow test cells created! Now run TestYellowBackground to analyze them.", vbInformation
+End Sub
+
+' 快速测试土黄色问题
+Public Sub QuickYellowTest()
+    Dim ws As Worksheet
+    Set ws = ActiveSheet
+    
+    Debug.Print "=== Quick Yellow Test ==="
+    
+    ' 测试A1单元格（如果有土黄色背景）
+    Dim testCell As Range
+    Set testCell = ws.Range("A1")
+    
+    Debug.Print "Testing cell A1:"
+    Debug.Print "  Interior.Color: " & testCell.Interior.Color
+    Debug.Print "  DisplayFormat.Interior.Color: " & testCell.DisplayFormat.Interior.Color
+    Debug.Print "  GetCellFillColor result: " & GetCellFillColor(testCell)
+    
+    ' 如果GetCellFillColor返回transparent，但实际有颜色，说明有问题
+    Dim fillColor As String
+    fillColor = GetCellFillColor(testCell)
+    
+    If fillColor = "transparent" And testCell.DisplayFormat.Interior.Color <> -4142 Then
+        Debug.Print "  PROBLEM DETECTED: Cell has color but GetCellFillColor returned transparent!"
+        Debug.Print "  This is likely the cause of missing yellow backgrounds."
+    Else
+        Debug.Print "  Color detection working correctly."
+    End If
+    
+    MsgBox "Quick yellow test completed! Check immediate window for results.", vbInformation
+End Sub
+
+' 测试TLdraw颜色映射的完整性
+Public Sub TestTldrawColorMapping()
+    Dim ws As Worksheet
+    Set ws = ActiveSheet
+    
+    Debug.Print "=== TLdraw Color Mapping Test ==="
+    
+    ' 测试Excel的56种标准颜色
+    Debug.Print "Testing Excel's 56 standard colors:"
+    Dim i As Long
+    For i = 1 To 56
+        Dim colorValue As Long
+        colorValue = ThisWorkbook.Colors(i)
+        
+        Dim r As Long, g As Long, b As Long
+        r = (colorValue And &HFF)
+        g = (colorValue \ &H100) And &HFF
+        b = (colorValue \ &H65536) And &HFF
+        
+        Dim mappedColor As String
+        mappedColor = MapExcelColorToTldraw(colorValue)
+        
+        Debug.Print "ColorIndex " & i & ": RGB(" & r & "," & g & "," & b & ") -> " & mappedColor
+    Next i
+    
+    ' 测试常见的自定义颜色
+    Debug.Print "Testing common custom colors:"
+    Dim customColors As Variant
+    customColors = Array(65535, 16776960, 16777088, 16777164, 16777200, 255, 65280, 16711680, 16777215, 0, 8421504, 12632256, 16777200)
+    
+    For i = 0 To UBound(customColors)
+        Dim customColor As Long
+        customColor = customColors(i)
+        Dim mappedCustomColor As String
+        mappedCustomColor = MapExcelColorToTldraw(customColor)
+        
+        Debug.Print "Custom color " & customColor & " -> " & mappedCustomColor
+    Next i
+    
+    ' 测试当前选中单元格
+    Dim selectedCell As Range
+    Set selectedCell = Selection
+    
+    Debug.Print "Selected cell " & selectedCell.Address & ":"
+    Debug.Print "  Original color: " & selectedCell.DisplayFormat.Interior.Color
+    Debug.Print "  Mapped to: " & MapExcelColorToTldraw(selectedCell.DisplayFormat.Interior.Color)
+    
+    MsgBox "TLdraw color mapping test completed! Check immediate window for results.", vbInformation
+End Sub
+
+' 创建TLdraw颜色测试工作表
+Public Sub CreateTldrawColorTest()
+    Dim ws As Worksheet
+    Set ws = ActiveSheet
+    
+    ' 清除测试区域
+    ws.Range("A1:J10").Clear
+    
+    ' 创建TLdraw颜色测试
+    Dim tldrawColors As Variant
+    tldrawColors = Array(Array("black", 0, 0, 0), Array("white", 255, 255, 255), Array("red", 255, 0, 0), Array("green", 0, 255, 0), Array("blue", 0, 0, 255), Array("yellow", 255, 255, 0), Array("orange", 255, 165, 0), Array("purple", 128, 0, 128), Array("pink", 255, 192, 203), Array("cyan", 0, 255, 255))
+    
+    Dim i As Long
+    For i = 0 To UBound(tldrawColors)
+        Dim colorName As String
+        Dim r As Long, g As Long, b As Long
+        colorName = tldrawColors(i)(0)
+        r = tldrawColors(i)(1)
+        g = tldrawColors(i)(2)
+        b = tldrawColors(i)(3)
+        
+        Dim colorValue As Long
+        colorValue = RGB(r, g, b)
+        
+        ' 设置单元格背景色
+        Dim cell As Range
+        Set cell = ws.Cells(1 + (i \ 5), 1 + (i Mod 5))
+        cell.Interior.Color = colorValue
+        cell.Value = colorName
+        cell.Font.Color = RGB(255 - r, 255 - g, 255 - b)  ' 对比色文字
+    Next i
+    
+    MsgBox "TLdraw color test sheet created! Run TestTldrawColorMapping to analyze.", vbInformation
+End Sub
+
+' 测试原始颜色信息输出
+Public Sub TestRawColorInfo()
+    Dim ws As Worksheet
+    Set ws = ActiveSheet
+    
+    Debug.Print "=== Raw Color Info Test ==="
+    
+    ' 测试几个单元格的原始颜色信息
+    Dim testCells As Variant
+    testCells = Array("A1", "B1", "C1", "A2", "B2", "C2")
+    
+    Dim i As Long
+    For i = 0 To UBound(testCells)
+        Dim cell As Range
+        Set cell = ws.Range(testCells(i))
+        
+        Debug.Print "Cell " & testCells(i) & ":"
+        Debug.Print "  Raw color info: " & GetCellFillColor(cell)
+        Debug.Print "  ---"
+    Next i
+    
+    MsgBox "Raw color info test completed! Check immediate window for results.", vbInformation
+End Sub
+
+' 测试JSON格式是否正确
+Public Sub TestJsonFormat()
+    Dim ws As Worksheet
+    Set ws = ActiveSheet
+    
+    Debug.Print "=== JSON Format Test ==="
+    
+    ' 测试颜色信息JSON格式
+    Dim testColor As String
+    testColor = BuildColorInfo(16776960, 16776960, 6)
+    Debug.Print "Color info JSON: " & testColor
+    
+    ' 测试单元格JSON构建
+    Dim testCell As Range
+    Set testCell = ws.Range("A1")
+    
+    ' 模拟单元格JSON构建
+    Dim cellJson As String
+    cellJson = "{""r"":1,""c"":1,""x"":0,""y"":0,""w"":100,""h"":20,""v"":""test"",""fillColor"":""" & testColor & """}"
+    Debug.Print "Cell JSON: " & cellJson
+    
+    ' 测试完整的JSON数组
+    Dim jsonArray As String
+    jsonArray = "[" & cellJson & "]"
+    Debug.Print "JSON Array: " & jsonArray
+    
+    MsgBox "JSON format test completed! Check immediate window for results.", vbInformation
+End Sub
+
+' 测试实际的颜色输出格式
+Public Sub TestActualColorOutput()
+    Dim ws As Worksheet
+    Set ws = ActiveSheet
+    
+    Debug.Print "=== Actual Color Output Test ==="
+    
+    ' 测试几个单元格的实际颜色输出
+    Dim testCells As Variant
+    testCells = Array("A1", "B1", "C1", "A2", "B2", "C2")
+    
+    Dim i As Long
+    For i = 0 To UBound(testCells)
+        Dim cell As Range
+        Set cell = ws.Range(testCells(i))
+        
+        Debug.Print "Cell " & testCells(i) & ":"
+        Debug.Print "  DisplayFormat.Color: " & cell.DisplayFormat.Interior.Color
+        Debug.Print "  Interior.Color: " & cell.Interior.Color
+        Debug.Print "  Interior.ColorIndex: " & cell.Interior.ColorIndex
+        Debug.Print "  GetCellFillColor output: " & GetCellFillColor(cell)
+        Debug.Print "  ---"
+    Next i
+    
+    ' 测试有颜色的单元格
+    Debug.Print "Testing colored cells:"
+    
+    ' 设置一些测试颜色
+    ws.Range("A1").Interior.Color = RGB(255, 255, 0)  ' 黄色
+    ws.Range("B1").Interior.Color = RGB(255, 0, 0)    ' 红色
+    ws.Range("C1").Interior.Color = RGB(0, 255, 0)     ' 绿色
+    
+    For i = 0 To 2
+        Dim testCell As Range
+        Set testCell = ws.Range(testCells(i))
+        
+        Debug.Print "Colored cell " & testCells(i) & ":"
+        Debug.Print "  DisplayFormat.Color: " & testCell.DisplayFormat.Interior.Color
+        Debug.Print "  GetCellFillColor output: " & GetCellFillColor(testCell)
+        Debug.Print "  ---"
+    Next i
+    
+    MsgBox "Actual color output test completed! Check immediate window for results.", vbInformation
+End Sub
+
 ' 新增：列出所有已导出的工作表信息
 Public Sub ListExportedSheets()
     Dim wb As Workbook
@@ -420,8 +766,7 @@ Public Sub ListExportedSheets()
     If count = 0 Then
         MsgBox "No exported sheets found in LayoutJson", vbInformation, "Exported Sheets"
     Else
-        MsgBox "Found " & count & " exported sheet(s):" & vbCrLf & vbCrLf & exportedSheets & _
-               "Detailed information has been output to immediate window, press Ctrl+G to view", vbInformation, "Exported Sheets"
+        MsgBox "Found " & count & " exported sheet(s):" & vbCrLf & vbCrLf & exportedSheets & "Detailed information has been output to immediate window, press Ctrl+G to view", vbInformation, "Exported Sheets"
     End If
 End Sub
 
@@ -449,11 +794,7 @@ End Function
 
 
 ' ================ CORE JSON BUILDER =================
-Private Function BuildSheetJson(ByVal ws As Worksheet, _
-                                ByRef outCells As Long, _
-                                ByRef outText As Long, _
-                                ByRef outPics As Long, _
-                                ByRef outBorders As Long) As String
+Private Function BuildSheetJson(ByVal ws As Worksheet, ByRef outCells As Long, ByRef outText As Long, ByRef outPics As Long, ByRef outBorders As Long) As String
     Dim sb As String
     Dim pt2px As Double: pt2px = PtToPxFactor()  ' usually 96/72 = 1.333333
     Dim wPx As Long, hPx As Long
@@ -505,6 +846,11 @@ Private Function CellsToJsonSparse(ByVal ws As Worksheet, ByRef nonEmptyCount As
             Dim cell As Range
             Set cell = ur.Cells(r, c)
             
+            ' 检查单元格是否被隐藏（行或列隐藏）
+            If IsCellHidden(cell) Then
+                GoTo NextCell
+            End If
+            
             ' 获取合并单元格的代表单元格
             Dim representativeCell As Range
             Set representativeCell = GetRepresentativeCell(cell)
@@ -517,8 +863,12 @@ Private Function CellsToJsonSparse(ByVal ws As Worksheet, ByRef nonEmptyCount As
             Dim v As Variant
             v = representativeCell.Value2
             
-            ' 只处理有内容的单元格
-            If Not IsEmpty(v) And CStr(v) <> "" Then
+            ' 处理有内容的单元格或有背景色的单元格
+            Dim hasContent As Boolean, hasBackground As Boolean
+            hasContent = (Not IsEmpty(v) And CStr(v) <> "")
+            hasBackground = (GetCellFillColor(representativeCell) <> "transparent")
+            
+            If hasContent Or hasBackground Then
                 If nonEmptyCount > 0 Then sb = sb & ","
                 
                 ' 获取合并区域的尺寸信息
@@ -533,7 +883,7 @@ Private Function CellsToJsonSparse(ByVal ws As Worksheet, ByRef nonEmptyCount As
                           ",""y"":" & CNumD(mergeArea.Top * pt2px) & _
                           ",""w"":" & CNumD(mergeArea.Width * pt2px) & _
                           ",""h"":" & CNumD(mergeArea.Height * pt2px) & _
-                          ",""v"":""" & EscapeJson(CStr(v)) & """," & _
+                          ",""v"":""" & IIf(hasContent, EscapeJson(CStr(v)), "") & """," & _
                           """hAlign"":""" & GetCellHAlign(representativeCell) & """," & _
                           """vAlign"":""" & GetCellVAlign(representativeCell) & """," & _
                           """fillColor"":""" & GetCellFillColor(representativeCell) & """," & _
@@ -694,16 +1044,66 @@ Private Function GetCellVAlign(ByVal cell As Range) As String
     On Error GoTo 0
 End Function
 
-' 获取单元格填充颜色
+' 获取单元格填充颜色（输出原始颜色信息供JavaScript映射）
 Private Function GetCellFillColor(ByVal cell As Range) As String
     On Error Resume Next
-    ' 检查单元格是否有填充颜色
-    If cell.Interior.ColorIndex = xlNone Then
-        GetCellFillColor = "#FFFFFF"  ' 无填充时返回白色
+    
+    ' 使用DisplayFormat获取实际显示的颜色（包括条件格式）
+    Dim displayColor As Long
+    displayColor = cell.DisplayFormat.Interior.Color
+    
+    ' 调试信息：记录颜色值
+    Debug.Print "GetCellFillColor for " & cell.Address & ":"
+    Debug.Print "  DisplayFormat.Color: " & displayColor
+    Debug.Print "  Interior.Color: " & cell.Interior.Color
+    Debug.Print "  Interior.ColorIndex: " & cell.Interior.ColorIndex
+    
+    ' 检查是否有填充颜色（不是自动颜色）
+    If displayColor = -4142 Then  ' xlNone
+        ' 检查是否真的是无填充
+        If cell.Interior.ColorIndex = xlNone And cell.Interior.Pattern = xlNone Then
+            GetCellFillColor = "transparent"  ' 使用透明而不是白色
+            Debug.Print "  Result: transparent (no fill)"
+        Else
+            ' 输出原始颜色信息供JavaScript映射
+            GetCellFillColor = BuildColorInfo(displayColor, cell.Interior.Color, cell.Interior.ColorIndex)
+            Debug.Print "  Result: " & GetCellFillColor & " (raw color info for JS mapping)"
+        End If
+    ElseIf displayColor = 16777215 Then  ' 白色
+        ' 检查是否真的是白色填充还是无填充
+        If cell.Interior.ColorIndex = xlNone And cell.Interior.Pattern = xlNone Then
+            GetCellFillColor = "transparent"
+            Debug.Print "  Result: transparent (no fill, white display)"
+        Else
+            GetCellFillColor = BuildColorInfo(displayColor, cell.Interior.Color, cell.Interior.ColorIndex)
+            Debug.Print "  Result: " & GetCellFillColor & " (white raw color info)"
+        End If
     Else
-        GetCellFillColor = RGBToHex(cell.Interior.Color)
+        ' 有填充颜色，输出原始颜色信息
+        GetCellFillColor = BuildColorInfo(displayColor, cell.Interior.Color, cell.Interior.ColorIndex)
+        Debug.Print "  Result: " & GetCellFillColor & " (raw color info for JS mapping)"
+        
+        ' 特别检查土黄色情况
+        If displayColor >= 65535 And displayColor <= 16777200 Then
+            Debug.Print "  Yellow color detected, raw info: " & GetCellFillColor
+        End If
     End If
+    
     On Error GoTo 0
+End Function
+
+' 构建颜色信息JSON（供JavaScript映射使用）
+Private Function BuildColorInfo(ByVal displayColor As Long, ByVal interiorColor As Long, ByVal colorIndex As Long) As String
+    Dim sb As String
+    sb = "{"
+    sb = sb & """displayColor"":" & displayColor & ","
+    sb = sb & """interiorColor"":" & interiorColor & ","
+    sb = sb & """colorIndex"":" & colorIndex & ","
+    sb = sb & """rgb"":""" & RGBToHex(displayColor) & """"
+    sb = sb & "}"
+    
+    ' 转义JSON字符串中的引号，使其可以作为JSON字符串值使用
+    BuildColorInfo = EscapeJson(sb)
 End Function
 
 Private Function FontNameOfShape(shp As Shape) As String
@@ -779,12 +1179,103 @@ Private Function CNum(ByVal l As Long) As String
     CNum = CStr(l)
 End Function
 
+' 映射Excel颜色到TLdraw支持的颜色枚举
+Private Function MapExcelColorToTldraw(ByVal excelColor As Long) As String
+    On Error Resume Next
+    
+    ' 处理特殊情况
+    If excelColor = -4142 Then  ' xlNone
+        MapExcelColorToTldraw = "transparent"
+        Exit Function
+    End If
+    
+    If excelColor < 0 Then
+        ' 处理负数情况（Excel有时会返回负数）
+        excelColor = excelColor + 16777216
+    End If
+    
+    ' 获取RGB值
+    Dim r As Long, g As Long, b As Long
+    r = (excelColor And &HFF)
+    g = (excelColor \ &H100) And &HFF
+    b = (excelColor \ &H10000) And &HFF
+    
+    ' 确保值在有效范围内
+    If r < 0 Then r = 0
+    If r > 255 Then r = 255
+    If g < 0 Then g = 0
+    If g > 255 Then g = 255
+    If b < 0 Then b = 0
+    If b > 255 Then b = 255
+    
+    ' 映射到TLdraw支持的颜色
+    MapExcelColorToTldraw = GetClosestTldrawColor(r, g, b)
+    
+    On Error GoTo 0
+End Function
+
+' 获取最接近的TLdraw颜色
+Private Function GetClosestTldrawColor(ByVal r As Long, ByVal g As Long, ByVal b As Long) As String
+    ' TLdraw支持的颜色枚举（基于常见的颜色调色板）
+    Dim tldrawColors As Variant
+    tldrawColors = Array(Array("black", 0, 0, 0), Array("white", 255, 255, 255), Array("red", 255, 0, 0), Array("green", 0, 255, 0), Array("blue", 0, 0, 255), Array("yellow", 255, 255, 0), Array("orange", 255, 165, 0), Array("purple", 128, 0, 128), Array("pink", 255, 192, 203), Array("cyan", 0, 255, 255), Array("magenta", 255, 0, 255), Array("lime", 0, 255, 0), Array("navy", 0, 0, 128), Array("maroon", 128, 0, 0), Array("olive", 128, 128, 0), Array("teal", 0, 128, 128), Array("silver", 192, 192, 192), Array("gray", 128, 128, 128), Array("lightgray", 211, 211, 211), Array("darkgray", 64, 64, 64), Array("lightblue", 173, 216, 230), Array("darkblue", 0, 0, 139), Array("lightgreen", 144, 238, 144), Array("darkgreen", 0, 100, 0), Array("lightyellow", 255, 255, 224), Array("darkyellow", 184, 134, 11), Array("lightred", 255, 182, 193), Array("darkred", 139, 0, 0), Array("brown", 165, 42, 42), Array("tan", 210, 180, 140))
+    
+    Dim minDistance As Double
+    minDistance = 999999
+    Dim closestColor As String
+    closestColor = "black"  ' 默认颜色
+    
+    Dim i As Long
+    For i = 0 To UBound(tldrawColors)
+        Dim tr As Long, tg As Long, tb As Long
+        tr = tldrawColors(i)(1)
+        tg = tldrawColors(i)(2)
+        tb = tldrawColors(i)(3)
+        
+        ' 计算欧几里得距离
+        Dim distance As Double
+        distance = Sqr((r - tr) ^ 2 + (g - tg) ^ 2 + (b - tb) ^ 2)
+        
+        If distance < minDistance Then
+            minDistance = distance
+            closestColor = tldrawColors(i)(0)
+        End If
+    Next i
+    
+    GetClosestTldrawColor = closestColor
+End Function
+
+' 保留原有的RGBToHex函数用于调试
 Private Function RGBToHex(ByVal rgbVal As Long) As String
+    On Error Resume Next
+    
+    ' 处理特殊情况
+    If rgbVal = -4142 Then  ' xlNone
+        RGBToHex = "transparent"
+        Exit Function
+    End If
+    
+    If rgbVal < 0 Then
+        ' 处理负数情况（Excel有时会返回负数）
+        rgbVal = rgbVal + 16777216
+    End If
+    
     Dim r As Long, g As Long, b As Long
     r = (rgbVal And &HFF)
     g = (rgbVal \ &H100) And &HFF
     b = (rgbVal \ &H10000) And &HFF
+    
+    ' 确保值在有效范围内
+    If r < 0 Then r = 0
+    If r > 255 Then r = 255
+    If g < 0 Then g = 0
+    If g > 255 Then g = 255
+    If b < 0 Then b = 0
+    If b > 255 Then b = 255
+    
     RGBToHex = "#" & Right$("0" & Hex$(r), 2) & Right$("0" & Hex$(g), 2) & Right$("0" & Hex$(b), 2)
+    
+    On Error GoTo 0
 End Function
 
 ' Check if shape has text frame (safe access)
@@ -1164,6 +1655,11 @@ Private Function BordersToJson(ByVal ws As Worksheet, ByVal pt2px As Double, ByR
             Set cell = ws.Cells(r, c)
             checkedCount = checkedCount + 1
             
+            ' 跳过隐藏的单元格
+            If IsCellHidden(cell) Then
+                GoTo NextBorderCell
+            End If
+            
             ' 检查单元格是否有边框
             If HasCellBorder(cell) Then
                 Debug.Print "BordersToJson: Found border at " & cell.Address & " (count=" & borderCount & ")"
@@ -1184,6 +1680,8 @@ Private Function BordersToJson(ByVal ws As Worksheet, ByVal pt2px As Double, ByR
                 ' End If
                 On Error GoTo EMPTY_RANGE
             End If
+            
+NextBorderCell:
         Next c
     Next r
     
@@ -1576,6 +2074,26 @@ Private Function GetBorderStyleName(ByVal lineStyle As Long) As String
         Case xlSlantDashDot: GetBorderStyleName = "SlantDashDot"
         Case Else: GetBorderStyleName = "Continuous"
     End Select
+End Function
+
+' 检查单元格是否被隐藏（行或列隐藏）
+Private Function IsCellHidden(ByVal cell As Range) As Boolean
+    On Error Resume Next
+    IsCellHidden = False
+    
+    ' 检查行是否隐藏
+    If cell.EntireRow.Hidden Then
+        IsCellHidden = True
+        Exit Function
+    End If
+    
+    ' 检查列是否隐藏
+    If cell.EntireColumn.Hidden Then
+        IsCellHidden = True
+        Exit Function
+    End If
+    
+    On Error GoTo 0
 End Function
 
 

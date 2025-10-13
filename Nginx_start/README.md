@@ -7,7 +7,7 @@
 - `stop_nginx.bat` - 只停止 Nginx
 - `start_fluidDAM.bat` - 只启动 FluidDAM
 - `stop_fluidDAM.bat` - 只停止 FluidDAM
-- `restart_fluidDAM.bat` - 重启 FluidDAM
+- `restart_fluidDAM.bat` - 重启 FluidDAM（简化可靠版本）
 
 ### 🔄 统一管理脚本（备用）
 - `startup.bat` - 同时启动 Nginx + FluidDAM

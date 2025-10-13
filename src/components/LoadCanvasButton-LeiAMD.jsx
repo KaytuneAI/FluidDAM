@@ -5,7 +5,6 @@ import ExcelJS from 'exceljs';
 import { toRichText } from 'tldraw';
 import storageManager from '../utils/storageManager.js';
 import SheetSelectionDialog from './SheetSelectionDialog.jsx';
-import { mapExcelColorToTL } from '../utils/colorMapper.js';
 
 export default function LoadCanvasButton({ editor, setIsLoading }) {
   const fileInputRef = useRef(null);
@@ -472,6 +471,9 @@ export default function LoadCanvasButton({ editor, setIsLoading }) {
     if (layoutData.sheet && layoutData.sheet.cells) {
       console.log('开始创建单元格背景色（最底层）:', layoutData.sheet.cells.length);
       
+      // 用于跟踪已处理的合并单元格，避免重复绘制内部边框
+      let processedMergedCells = new Set();
+      
       for (const cell of layoutData.sheet.cells) {
         try {
           // 验证并设置默认值
@@ -480,28 +482,44 @@ export default function LoadCanvasButton({ editor, setIsLoading }) {
           const w = typeof cell.w === 'number' && cell.w > 0 ? cell.w : 50; // 默认宽度50
           const h = typeof cell.h === 'number' && cell.h > 0 ? cell.h : 20; // 默认高度20
           
-          // 使用新的颜色映射函数
-          const tlColor = mapExcelColorToTL(cell.fillColor, {
-            forceVeryLightToGrey: false,  // 白色保持白色
-            lightnessAsWhite: 0.94,       // 提高白阈值，RGB(240,240,240)以上为白色
-            lightnessAsBlack: 0.12,       // 黑阈值
-            minSaturation: 0.18,          // 低饱和阈值
-          });
-
-          // 白色保持白色
-          const finalColor = tlColor;
+          // 使用VBA提供的精确坐标和尺寸
+          const cellFillColor = mapCellFillColor(cell.fillColor);
           
           // 调试信息：显示单元格颜色映射结果
           if (cell.fillColor && cell.fillColor !== '#FFFFFF') {
             console.log('🎨 单元格颜色映射:', {
               原始颜色: cell.fillColor,
-              映射颜色: finalColor,
-              填充模式: finalColor === 'none' ? 'none' : 'solid'
+              映射颜色: cellFillColor,
+              填充模式: cellFillColor === 'none' ? 'none' : 'solid'
             });
           }
           
           // 创建单元格背景色（最底层，Z-order = -1000）
-          if (finalColor !== 'none') {
+          // 对于合并单元格，只处理代表单元格，避免重复绘制内部背景
+          const isMerged = cell.isMerged || false;
+          const mergeArea = cell.mergeArea || '';
+          const isRepresentative = cell.isRepresentative || false;
+          
+          // 如果是合并单元格，只处理代表单元格
+          if (isMerged && !isRepresentative) {
+            console.log('跳过合并单元格非代表格背景:', cell);
+            continue; // 跳过非代表单元格
+          }
+          
+          // 如果是合并单元格，检查是否已经处理过
+          if (isMerged && mergeArea) {
+            if (processedMergedCells && processedMergedCells.has(mergeArea)) {
+              console.log('跳过已处理的合并单元格背景:', mergeArea);
+              continue; // 跳过已处理的合并单元格
+            }
+            if (!processedMergedCells) {
+              processedMergedCells = new Set();
+            }
+            processedMergedCells.add(mergeArea);
+            console.log('处理合并单元格代表格背景:', mergeArea, 'isRepresentative:', isRepresentative);
+          }
+          
+          if (cellFillColor !== 'none') {
             const cellBackgroundShape = {
               type: 'geo',
               x: x, // 使用验证后的X坐标
@@ -511,7 +529,7 @@ export default function LoadCanvasButton({ editor, setIsLoading }) {
                 w: w, // 使用验证后的宽度
                 h: h, // 使用验证后的高度
                 fill: 'solid',
-                color: finalColor, // 使用映射后的颜色
+                color: cellFillColor, // 使用映射后的颜色
                 dash: 'solid',
                 size: 's' // 细线条
               }
@@ -519,115 +537,46 @@ export default function LoadCanvasButton({ editor, setIsLoading }) {
             editor.createShape(cellBackgroundShape);
           }
           
+          // 创建单元格边框（透明填充，只显示边框，Z-order = -999）
+          // 对于合并单元格，只处理代表单元格，避免重复绘制内部边框
+          
+          // 如果是合并单元格，只处理代表单元格
+          if (isMerged && !isRepresentative) {
+            console.log('跳过合并单元格非代表格:', cell);
+            continue; // 跳过非代表单元格
+          }
+          
+          // 如果是合并单元格，检查是否已经处理过
+          if (isMerged && mergeArea) {
+            if (processedMergedCells && processedMergedCells.has(mergeArea)) {
+              console.log('跳过已处理的合并单元格:', mergeArea);
+              continue; // 跳过已处理的合并单元格
+            }
+            if (!processedMergedCells) {
+              processedMergedCells = new Set();
+            }
+            processedMergedCells.add(mergeArea);
+            console.log('处理合并单元格代表格:', mergeArea, 'isRepresentative:', isRepresentative);
+          }
+          
+          const cellBorderShape = {
+            type: 'geo',
+            x: x, // 使用验证后的X坐标
+            y: y, // 使用验证后的Y坐标
+            props: {
+              geo: 'rectangle',
+              w: w, // 使用验证后的宽度
+              h: h, // 使用验证后的高度
+              fill: 'none',
+              color: 'grey', // 边框颜色固定为灰色
+              dash: 'solid',
+              size: 's' // 细线条
+            }
+          };
+          editor.createShape(cellBorderShape);
+          
         } catch (error) {
           console.warn('创建单元格背景失败:', cell, error);
-        }
-      }
-    }
-    
-    // 4.5. 处理VBA输出的边框数组（新增功能）
-    if (layoutData.sheet && layoutData.sheet.borders && layoutData.sheet.borders.length > 0) {
-      console.log('开始处理VBA输出的边框数组:', layoutData.sheet.borders.length);
-      
-      for (const borderItem of layoutData.sheet.borders) {
-        try {
-          // 验证边框数据
-          const x = typeof borderItem.x === 'number' ? borderItem.x : 0;
-          const y = typeof borderItem.y === 'number' ? borderItem.y : 0;
-          const w = typeof borderItem.width === 'number' && borderItem.width > 0 ? borderItem.width : 50;
-          const h = typeof borderItem.height === 'number' && borderItem.height > 0 ? borderItem.height : 20;
-          
-          // 检查边框信息
-          if (borderItem.borders) {
-            const { top, right, bottom, left } = borderItem.borders;
-            
-            // 根据边框信息创建相应的边框形状
-            if (top) {
-              const topBorderShape = {
-                type: 'geo',
-                x: x,
-                y: y,
-                props: {
-                  geo: 'rectangle',
-                  w: w,
-                  h: 1, // 细线高度
-                  fill: 'none',
-                  color: 'black',
-                  dash: 'solid',
-                  size: 's'
-                }
-              };
-              editor.createShape(topBorderShape);
-            }
-            
-            if (bottom) {
-              const bottomBorderShape = {
-                type: 'geo',
-                x: x,
-                y: y + h - 1,
-                props: {
-                  geo: 'rectangle',
-                  w: w,
-                  h: 1, // 细线高度
-                  fill: 'none',
-                  color: 'black',
-                  dash: 'solid',
-                  size: 's'
-                }
-              };
-              editor.createShape(bottomBorderShape);
-            }
-            
-            if (left) {
-              const leftBorderShape = {
-                type: 'geo',
-                x: x,
-                y: y,
-                props: {
-                  geo: 'rectangle',
-                  w: 1, // 细线宽度
-                  h: h,
-                  fill: 'none',
-                  color: 'black',
-                  dash: 'solid',
-                  size: 's'
-                }
-              };
-              editor.createShape(leftBorderShape);
-            }
-            
-            if (right) {
-              const rightBorderShape = {
-                type: 'geo',
-                x: x + w - 1,
-                y: y,
-                props: {
-                  geo: 'rectangle',
-                  w: 1, // 细线宽度
-                  h: h,
-                  fill: 'none',
-                  color: 'black',
-                  dash: 'solid',
-                  size: 's'
-                }
-              };
-              editor.createShape(rightBorderShape);
-            }
-            
-            // 如果有样式信息，使用样式信息
-            if (borderItem.styles) {
-              // 这里可以根据styles信息调整边框样式
-              // 目前先使用默认样式，后续可以扩展
-            }
-            
-            console.log('✅ 创建边框:', {
-              address: borderItem.address || `${borderItem.row},${borderItem.col}`,
-              borders: { top, right, bottom, left },
-              position: { x, y, w, h }
-            });
-          }
-        } catch (error) {
-          console.warn('创建边框失败:', borderItem, error);
         }
       }
     }
@@ -659,12 +608,7 @@ export default function LoadCanvasButton({ editor, setIsLoading }) {
                 w: textbox.width,
                 h: textbox.height,
                 fill: hasFill ? 'solid' : 'none',
-                color: hasFill ? mapExcelColorToTL(textbox.fill.color, {
-                  forceVeryLightToGrey: false,  // 白色保持白色
-                  lightnessAsWhite: 0.94,       // 提高白阈值，RGB(240,240,240)以上为白色
-                  lightnessAsBlack: 0.12,
-                  minSaturation: 0.18,
-                }) : 'black',
+                color: hasFill ? mapColorToTLDraw(textbox.fill.color) : 'black',
                 ...(hasBorder && {
                   dash: mapBorderStyle(textbox.border.style),
                   size: 's'  // 强制设置为最细边框
@@ -1351,6 +1295,67 @@ function normalizeTextColor(hex) {
   return 'black'; // 默认返回黑色
 }
 
+// 单元格填充颜色映射：将十六进制颜色映射到TLDraw支持的颜色名称
+function mapCellFillColor(hex) {
+  if (typeof hex !== 'string' || !/^#([0-9a-f]{6})$/i.test(hex)) {
+    return 'none'; // 默认无填充
+  }
+  
+  // 移除#号并转换为小写
+  const hexColor = hex.replace('#', '').toLowerCase();
+  
+  // 如果是白色或接近白色，返回无填充
+  if (hexColor === 'ffffff' || hexColor === 'fffffe' || hexColor === 'fffffd') {
+    return 'none';
+  }
+  
+  // 常见颜色映射到TLDraw支持的颜色
+  const colorMap = {
+    '000000': 'black',
+    'ff0000': 'red',
+    '00ff00': 'green',
+    '0000ff': 'blue',
+    'ffff00': 'yellow',
+    'ffa500': 'orange',
+    '800080': 'violet',
+    'ffc0cb': 'light-red',
+    '90ee90': 'light-green',
+    'add8e6': 'light-blue',
+    'dda0dd': 'light-violet',
+    '808080': 'grey',
+    'c0c0c0': 'grey',
+    'd3d3d3': 'grey',
+    'f0f0f0': 'grey'
+  };
+  
+  // 精确匹配
+  if (colorMap[hexColor]) {
+    return colorMap[hexColor];
+  }
+  
+  // 根据颜色值进行近似匹配
+  const r = parseInt(hexColor.substr(0, 2), 16);
+  const g = parseInt(hexColor.substr(2, 2), 16);
+  const b = parseInt(hexColor.substr(4, 2), 16);
+  
+  // 计算亮度
+  const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+  
+  // 如果太亮（接近白色），返回无填充
+  if (brightness > 240) return 'none';
+  
+  // 根据RGB值判断主要颜色
+  if (r > g && r > b) return 'red';
+  if (g > r && g > b) return 'green';
+  if (b > r && b > g) return 'blue';
+  if (r > 200 && g > 200 && b < 100) return 'yellow';
+  if (r > 200 && g > 100 && b < 100) return 'orange';
+  if (r > 100 && g < 100 && b > 100) return 'violet';
+  if (brightness < 100) return 'black';
+  if (brightness > 150) return 'grey';
+  
+  return 'grey'; // 默认返回灰色
+}
 
 /**
  * 精准放置文本：基于实际渲染尺寸计算对齐位置
