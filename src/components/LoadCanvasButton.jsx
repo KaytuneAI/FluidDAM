@@ -548,8 +548,8 @@ export default function LoadCanvasButton({ editor, setIsLoading }) {
             
             // 如果有边框，创建边框线条
             if (hasBorder) {
-              const borderWidth = 1;
-              const borderColor = 'black';
+              const borderWidth = 0.5; // 减小到0.5像素，让边框更细
+              const borderColor = 'grey'; // 使用灰色而不是黑色，看起来更细
               // 纯背景色格子使用点线边框，其他格子使用实线边框
               const borderDash = isPureBackgroundCell ? 'dotted' : 'solid';
               
@@ -671,9 +671,9 @@ export default function LoadCanvasButton({ editor, setIsLoading }) {
                 props: {
                   geo: 'rectangle',
                   w: w,
-                  h: 1, // 细线高度
-                  fill: 'none',
-                  color: 'black',
+                  h: 0.5, // 更细的线高度
+                  fill: 'solid',
+                  color: 'grey', // 使用灰色，看起来更细
                   dash: 'solid',
                   size: 's'
                 }
@@ -685,13 +685,13 @@ export default function LoadCanvasButton({ editor, setIsLoading }) {
               const bottomBorderShape = {
                 type: 'geo',
                 x: x,
-                y: y + h - 1,
+                y: y + h - 0.5,
                 props: {
                   geo: 'rectangle',
                   w: w,
-                  h: 1, // 细线高度
-                  fill: 'none',
-                  color: 'black',
+                  h: 0.5, // 更细的线高度
+                  fill: 'solid',
+                  color: 'grey', // 使用灰色，看起来更细
                   dash: 'solid',
                   size: 's'
                 }
@@ -706,10 +706,10 @@ export default function LoadCanvasButton({ editor, setIsLoading }) {
                 y: y,
                 props: {
                   geo: 'rectangle',
-                  w: 1, // 细线宽度
+                  w: 0.5, // 更细的线宽度
                   h: h,
-                  fill: 'none',
-                  color: 'black',
+                  fill: 'solid',
+                  color: 'grey', // 使用灰色，看起来更细
                   dash: 'solid',
                   size: 's'
                 }
@@ -720,14 +720,14 @@ export default function LoadCanvasButton({ editor, setIsLoading }) {
             if (right) {
               const rightBorderShape = {
                 type: 'geo',
-                x: x + w - 1,
+                x: x + w - 0.5,
                 y: y,
                 props: {
                   geo: 'rectangle',
-                  w: 1, // 细线宽度
+                  w: 0.5, // 更细的线宽度
                   h: h,
-                  fill: 'none',
-                  color: 'black',
+                  fill: 'solid',
+                  color: 'grey', // 使用灰色，看起来更细
                   dash: 'solid',
                   size: 's'
                 }
@@ -1106,7 +1106,7 @@ export default function LoadCanvasButton({ editor, setIsLoading }) {
                 w: borderInfo.w,
                 h: borderInfo.h,
                 fill: 'none',
-                color: 'black',
+                color: 'grey', // 使用灰色，看起来更细
                 dash: 'solid',
                 size: 's' // 细线条
               }
