@@ -257,6 +257,18 @@ export default function LoadCanvasButton({ editor, setIsLoading }) {
   };
 
   // 处理布局数据的函数
+  // 判断是否绘制背景矩形的函数
+  const hasVisibleFill = (hex) => {
+    if (!hex || hex === 'none') return false;
+    const c = hex.replace('#', '');
+    if (c.length !== 6) return true;
+    const r = parseInt(c.slice(0, 2), 16);
+    const g = parseInt(c.slice(2, 4), 16);
+    const b = parseInt(c.slice(4, 6), 16);
+    // 白色或接近白的颜色不画背景
+    return !(r > 245 && g > 245 && b > 245);
+  };
+
   const processLayoutData = async (layoutData, file) => {
     // 开始处理布局数据
     
@@ -507,15 +519,17 @@ export default function LoadCanvasButton({ editor, setIsLoading }) {
           });
           
           // 创建单元格背景色（最底层，Z-order = -1000）
-          if (finalColor !== 'none') {
+          // 使用hasVisibleFill函数判断是否绘制背景矩形
+          if (hasVisibleFill(finalColor) && (cell.isRepresentative ?? true)) {
+            const inset = 0.5; // 1px内缩，防止描边压线
             const cellBackgroundShape = {
               type: 'geo',
-              x: x, // 使用验证后的X坐标
-              y: y, // 使用验证后的Y坐标
+              x: x + inset, // 使用验证后的X坐标 + 内缩
+              y: y + inset, // 使用验证后的Y坐标 + 内缩
               props: {
                 geo: 'rectangle',
-                w: w, // 使用验证后的宽度
-                h: h, // 使用验证后的高度
+                w: Math.max(0, w - inset * 2), // 宽度减去内缩
+                h: Math.max(0, h - inset * 2), // 高度减去内缩
                 fill: 'solid',
                 color: finalColor, // 使用映射后的颜色
                 dash: 'solid',
@@ -523,6 +537,19 @@ export default function LoadCanvasButton({ editor, setIsLoading }) {
               }
             };
             editor.createShape(cellBackgroundShape);
+            
+            console.log('✅ 创建单元格背景:', {
+              地址: cell.address || `${cell.r},${cell.c}`,
+              颜色: finalColor,
+              位置: { x: x + inset, y: y + inset },
+              尺寸: { w: Math.max(0, w - inset * 2), h: Math.max(0, h - inset * 2) }
+            });
+          } else {
+            console.log('⏭️ 跳过单元格背景:', {
+              地址: cell.address || `${cell.r},${cell.c}`,
+              颜色: finalColor,
+              原因: !hasVisibleFill(finalColor) ? '颜色太浅/白色' : '非代表单元格'
+            });
           }
           
         } catch (error) {
@@ -543,7 +570,7 @@ export default function LoadCanvasButton({ editor, setIsLoading }) {
           const w = typeof borderItem.width === 'number' && borderItem.width > 0 ? borderItem.width : 50;
           const h = typeof borderItem.height === 'number' && borderItem.height > 0 ? borderItem.height : 20;
           
-          // 检查边框信息
+          // 检查边框信息 - VBA可能只提供位置信息，没有详细的边框信息
           if (borderItem.borders) {
             const { top, right, bottom, left } = borderItem.borders;
             
@@ -620,17 +647,14 @@ export default function LoadCanvasButton({ editor, setIsLoading }) {
               editor.createShape(rightBorderShape);
             }
             
-            // 如果有样式信息，使用样式信息
-            if (borderItem.styles) {
-              // 这里可以根据styles信息调整边框样式
-              // 目前先使用默认样式，后续可以扩展
-            }
-            
             console.log('✅ 创建边框:', {
               address: borderItem.address || `${borderItem.row},${borderItem.col}`,
               borders: { top, right, bottom, left },
               position: { x, y, w, h }
             });
+          } else {
+            // 禁用默认边框逻辑 - 如果VBA没有提供边框详细信息，则不绘制任何边框
+            console.log('⏭️ VBA未提供边框详细信息，跳过边框绘制:', borderItem.address);
           }
         } catch (error) {
           console.warn('创建边框失败:', borderItem, error);
@@ -894,6 +918,121 @@ export default function LoadCanvasButton({ editor, setIsLoading }) {
           // 单元格文本创建完成
         } catch (error) {
           console.warn('创建单元格文本失败:', cell, error);
+        }
+      }
+    }
+    
+    // 7. 为合并单元格创建边框（VBA的borders数组可能没有包含合并单元格的完整边框）
+    console.log('🔍 检查是否应该创建合并单元格边框:', {
+      hasSheet: !!layoutData.sheet,
+      hasCells: !!(layoutData.sheet && layoutData.sheet.cells),
+      cellsLength: layoutData.sheet?.cells?.length || 0
+    });
+    
+    if (layoutData.sheet && layoutData.sheet.cells) {
+      console.log('开始为合并单元格创建边框');
+      
+      // 统计合并单元格数量
+      let mergedCellCount = 0;
+      for (const cell of layoutData.sheet.cells) {
+        if (cell.isMerged && cell.mergeArea) {
+          mergedCellCount++;
+        }
+      }
+      console.log('🔍 找到合并单元格数量:', mergedCellCount);
+      
+      // 收集所有合并单元格的边框信息
+      const mergedCellBorders = new Map();
+      
+      for (const cell of layoutData.sheet.cells) {
+        try {
+          // 检查是否是合并单元格的代表单元格
+          if (cell.isMerged && cell.mergeArea) {
+            const mergeKey = `${cell.mergeArea}`;
+            
+            if (!mergedCellBorders.has(mergeKey)) {
+              // 检查VBA的borders数组中是否包含这个合并单元格的边框
+              let hasBorderInVBA = false;
+              if (layoutData.sheet.borders) {
+                for (const borderItem of layoutData.sheet.borders) {
+                  // 检查borders数组中是否有这个合并单元格的边框
+                  // 需要检查合并单元格的每个单元格是否在borders数组中
+                  const mergeCells = mergeKey.split(':');
+                  const startCell = mergeCells[0]; // 如 $B$2
+                  const endCell = mergeCells[1];   // 如 $B$3
+                  
+                  if (borderItem.address && 
+                      (borderItem.address.includes(startCell) || 
+                       borderItem.address.includes(endCell) ||
+                       borderItem.address === mergeKey)) {
+                    hasBorderInVBA = true;
+                    console.log('✅ 在VBA borders中找到合并单元格边框:', {
+                      mergeKey,
+                      borderAddress: borderItem.address,
+                      borderPosition: { x: borderItem.x, y: borderItem.y, w: borderItem.width, h: borderItem.height }
+                    });
+                    break;
+                  }
+                }
+              }
+              
+              // 如果没有在VBA borders中找到，记录调试信息
+              if (!hasBorderInVBA) {
+                console.log('⚠️ VBA borders中未找到合并单元格边框:', {
+                  mergeKey,
+                  bordersCount: layoutData.sheet.borders?.length || 0
+                });
+              }
+              
+              mergedCellBorders.set(mergeKey, {
+                x: cell.x,
+                y: cell.y,
+                w: cell.w,
+                h: cell.h,
+                hasBorder: hasBorderInVBA // 只有VBA检测到边框的合并单元格才创建边框
+              });
+              
+              console.log('🔍 合并单元格边框检测:', {
+                mergeKey,
+                hasBorderInVBA,
+                position: { x: cell.x, y: cell.y, w: cell.w, h: cell.h }
+              });
+            }
+          }
+        } catch (error) {
+          console.warn('处理合并单元格边框失败:', cell, error);
+        }
+      }
+      
+      // 为每个合并单元格创建边框
+      for (const [mergeKey, borderInfo] of mergedCellBorders) {
+        try {
+          if (borderInfo.hasBorder) {
+            // 创建合并单元格的边框矩形
+            const mergedCellBorderShape = {
+              type: 'geo',
+              x: borderInfo.x,
+              y: borderInfo.y,
+              props: {
+                geo: 'rectangle',
+                w: borderInfo.w,
+                h: borderInfo.h,
+                fill: 'none',
+                color: 'black',
+                dash: 'solid',
+                size: 's' // 细线条
+              }
+            };
+            
+            editor.createShape(mergedCellBorderShape);
+            
+            console.log('✅ 创建合并单元格边框:', {
+              mergeKey,
+              position: { x: borderInfo.x, y: borderInfo.y, w: borderInfo.w, h: borderInfo.h }
+            });
+          }
+        } catch (error) {
+          console.warn('创建合并单元格边框失败:', mergeKey, error);
         }
       }
     }
