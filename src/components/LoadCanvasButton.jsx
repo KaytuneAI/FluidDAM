@@ -996,7 +996,7 @@ export default function LoadCanvasButton({ editor, setIsLoading }) {
               text: cell.v,
               font: mapExcelFontToTL(cellFontName),
               size: mapPtToTLSize(cellFontSize),
-              color: normalizeTextColor(cellColorHex),
+              color: normalizeTextColor(cell.fontColor || cellColorHex),  // 优先使用导出的字体颜色，并转换为TLDraw支持的颜色
               hAlign: cellHAlign || 'left',     // 'left' | 'center' | 'right'
               vAlign: cellVAlign || 'top',      // 'top' | 'middle' | 'bottom'
               padding: 4,

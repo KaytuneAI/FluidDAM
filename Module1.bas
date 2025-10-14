@@ -594,7 +594,14 @@ Private Function CellsToJsonSparse(ByVal ws As Worksheet, ByRef nonEmptyCount As
                           """vAlign"":""" & GetCellVAlign(representativeCell) & """," & _
                           """isMerged"":" & LCase$(CStr(representativeCell.MergeCells)) & "," & _
                           """mergeArea"":""" & representativeCell.MergeArea.Address & """," & _
-                          """hasBorder"":" & LCase$(CStr(HasOuterBorder(representativeCell))) & "}"
+                          """hasBorder"":" & LCase$(CStr(HasOuterBorder(representativeCell)))
+                
+                ' 只有有文字的单元格才添加 fontColor 字段
+                If hasText Then
+                    sb = sb & ",""fontColor"":""" & GetCellFontColor(representativeCell) & """"
+                End If
+                
+                sb = sb & "}"
                 
                 nonEmptyCount = nonEmptyCount + 1
             End If
@@ -776,6 +783,53 @@ End Function
 Private Function FontNameOfShape(shp As Shape) As String
     On Error Resume Next
     FontNameOfShape = shp.TextFrame2.TextRange.Font.Name
+End Function
+
+' 获取单元格字体颜色
+Private Function GetCellFontColor(ByVal cell As Range) As String
+    On Error GoTo EH
+    Dim src As Range
+    Dim col As Long
+    
+    ' 如果是合并单元格，使用代表单元格
+    If cell.MergeCells Then
+        Set src = cell.MergeArea.Cells(1, 1)
+    Else
+        Set src = cell
+    End If
+
+    ' 优先最终显示色（含条件格式/主题）
+    col = src.DisplayFormat.Font.Color
+
+    ' 若读取异常或无效则兜底取直接字体色
+    If col = 0 And src.Font.Color <> 0 Then col = src.Font.Color
+
+    ' 若仍无效/自动，则做对比度兜底（基于底色）
+    If col = 0 Then
+        Dim fill As String
+        fill = GetCellFillColor(src)
+        ' 解析 #RRGGBB → 计算亮度
+        Dim r As Long, g As Long, b As Long, lum As Long
+        If Left$(fill, 1) = "#" Then
+            r = Val("&H" & Mid$(fill, 2, 2))
+            g = Val("&H" & Mid$(fill, 4, 2))
+            b = Val("&H" & Mid$(fill, 6, 2))
+            lum = (r + g + b) \ 3
+            If lum < 128 Then
+                GetCellFontColor = "#FFFFFF"
+            Else
+                GetCellFontColor = "#000000"
+            End If
+            Exit Function
+        End If
+        GetCellFontColor = "#000000"
+        Exit Function
+    End If
+
+    GetCellFontColor = RGBToHex(col)
+    Exit Function
+EH:
+    GetCellFontColor = "#000000"
 End Function
 
 ' 检测单元格是否有任意一条外边框
