@@ -546,12 +546,10 @@ export default function LoadCanvasButton({ editor, setIsLoading }) {
             };
             editor.createShape(cellBackgroundShape);
             
-            // 如果有边框，创建边框线条
-            if (hasBorder) {
+            // 如果有边框且不是纯背景色格子，创建边框线条
+            if (hasBorder && !isPureBackgroundCell) {
               const borderWidth = 1;
               const borderColor = 'black';
-              // 纯背景色格子使用点线边框，其他格子使用实线边框
-              const borderDash = isPureBackgroundCell ? 'dotted' : 'solid';
               
               // 创建上边框
               const topBorderShape = {
@@ -564,7 +562,7 @@ export default function LoadCanvasButton({ editor, setIsLoading }) {
                   h: borderWidth,
                   fill: 'solid',
                   color: borderColor,
-                  dash: borderDash,
+                  dash: 'solid',
                   size: 's'
                 }
               };
@@ -581,7 +579,7 @@ export default function LoadCanvasButton({ editor, setIsLoading }) {
                   h: borderWidth,
                   fill: 'solid',
                   color: borderColor,
-                  dash: borderDash,
+                  dash: 'solid',
                   size: 's'
                 }
               };
@@ -598,7 +596,7 @@ export default function LoadCanvasButton({ editor, setIsLoading }) {
                   h: Math.max(0, h - inset * 2),
                   fill: 'solid',
                   color: borderColor,
-                  dash: borderDash,
+                  dash: 'solid',
                   size: 's'
                 }
               };
@@ -615,7 +613,7 @@ export default function LoadCanvasButton({ editor, setIsLoading }) {
                   h: Math.max(0, h - inset * 2),
                   fill: 'solid',
                   color: borderColor,
-                  dash: borderDash,
+                  dash: 'solid',
                   size: 's'
                 }
               };
@@ -627,10 +625,7 @@ export default function LoadCanvasButton({ editor, setIsLoading }) {
               颜色: finalColor,
               位置: { x: x + inset, y: y + inset },
               尺寸: { w: Math.max(0, w - inset * 2), h: Math.max(0, h - inset * 2) },
-              有边框: hasBorder,
-              有文字: hasText,
-              纯背景色格子: isPureBackgroundCell,
-              边框样式: hasBorder ? (isPureBackgroundCell ? 'dotted' : 'solid') : '无边框'
+              有边框: hasBorder
             });
           } else {
             console.log('⏭️ 跳过单元格背景:', {

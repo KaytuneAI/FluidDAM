@@ -547,14 +547,7 @@ Private Function CellsToJsonSparse(ByVal ws As Worksheet, ByRef nonEmptyCount As
             Dim cell As Range
             Set cell = ur.Cells(r, c)
             
-            
-            ' Skip non-representative cells in a merged area to avoid duplicate outputs
-            If cell.MergeCells Then
-                If Not (cell.Address = cell.MergeArea.Cells(1, 1).Address) Then
-                    GoTo NextCell
-                End If
-            End If
-    ' 获取合并单元格的代表单元格
+            ' 获取合并单元格的代表单元格
             Dim representativeCell As Range
             Set representativeCell = GetRepresentativeCell(cell)
             
@@ -566,15 +559,8 @@ Private Function CellsToJsonSparse(ByVal ws As Worksheet, ByRef nonEmptyCount As
             Dim v As Variant
             v = representativeCell.Value2
             
-            ' 计算是否有文字和底色
-            Dim hasText As Boolean
-            hasText = Not IsEmpty(v) And CStr(v) <> ""
-            
-            Dim fillColor As String
-            fillColor = GetCellFillColor(representativeCell)
-            
-            ' 输出条件：有文字 或 底色不是白色
-            If hasText Or fillColor <> "#FFFFFF" Then
+            ' 只处理有内容的单元格
+            If Not IsEmpty(v) And CStr(v) <> "" Then
                 If nonEmptyCount > 0 Then sb = sb & ","
                 
                 ' 获取合并区域的尺寸信息
@@ -589,12 +575,11 @@ Private Function CellsToJsonSparse(ByVal ws As Worksheet, ByRef nonEmptyCount As
                           ",""w"":" & CNumD(mergeArea.Width * pt2px) & _
                           ",""h"":" & CNumD(mergeArea.Height * pt2px) & _
                           ",""v"":""" & EscapeJson(CStr(v)) & """," & _
-                          """fillColor"":""" & fillColor & """," & _
+                          """fillColor"":""" & GetCellFillColor(representativeCell) & """," & _
                           """hAlign"":""" & GetCellHAlign(representativeCell) & """," & _
                           """vAlign"":""" & GetCellVAlign(representativeCell) & """," & _
                           """isMerged"":" & LCase$(CStr(representativeCell.MergeCells)) & "," & _
-                          """mergeArea"":""" & representativeCell.MergeArea.Address & """," & _
-                          """hasBorder"":" & LCase$(CStr(HasOuterBorder(representativeCell))) & "}"
+                          """mergeArea"":""" & representativeCell.MergeArea.Address & """}"
                 
                 nonEmptyCount = nonEmptyCount + 1
             End If
@@ -747,64 +732,19 @@ End Function
 
 ' 获取单元格填充颜色
 Private Function GetCellFillColor(ByVal cell As Range) As String
-    On Error GoTo EH
-    Dim src As Range
-    ' If merged, take the top-left cell as the style source
-    If cell.MergeCells Then
-        Set src = cell.MergeArea.Cells(1, 1)
+    On Error Resume Next
+    ' 检查单元格是否有填充颜色
+    If cell.Interior.ColorIndex = xlNone Then
+        GetCellFillColor = "#FFFFFF"  ' 无填充时返回白色
     Else
-        Set src = cell
+        GetCellFillColor = RGBToHex(cell.Interior.Color)
     End If
-    
-    ' 优先 DisplayFormat (包含条件格式/主题后的结果)
-    If src.DisplayFormat.Interior.Pattern <> xlPatternNone Then
-        GetCellFillColor = RGBToHex(src.DisplayFormat.Interior.Color)
-        Exit Function
-    End If
-    
-    ' 兜底 Interior.Color
-    If src.Interior.Pattern <> xlPatternNone Then
-        GetCellFillColor = RGBToHex(src.Interior.Color)
-    Else
-        GetCellFillColor = "#FFFFFF"
-    End If
-    Exit Function
-EH:
-    GetCellFillColor = "#FFFFFF"
+    On Error GoTo 0
 End Function
 
 Private Function FontNameOfShape(shp As Shape) As String
     On Error Resume Next
     FontNameOfShape = shp.TextFrame2.TextRange.Font.Name
-End Function
-
-' 检测单元格是否有任意一条外边框
-Private Function HasOuterBorder(ByVal cell As Range) As Boolean
-    On Error GoTo EH
-    Dim src As Range
-    If cell.MergeCells Then
-        Set src = cell.MergeArea
-        If cell.Address <> src.Cells(1, 1).Address Then HasOuterBorder = False: Exit Function
-    Else
-        Set src = cell
-    End If
-    Dim t&, r&, b&, l&
-    ' DisplayFormat 优先
-    t = src.Cells(1,1).DisplayFormat.Borders(xlEdgeTop).LineStyle
-    r = src.Cells(1,1).DisplayFormat.Borders(xlEdgeRight).LineStyle
-    b = src.Cells(1,1).DisplayFormat.Borders(xlEdgeBottom).LineStyle
-    l = src.Cells(1,1).DisplayFormat.Borders(xlEdgeLeft).LineStyle
-    If t = xlLineStyleNone And r = xlLineStyleNone And b = xlLineStyleNone And l = xlLineStyleNone Then
-        ' 兜底看直接格式
-        t = src.Borders(xlEdgeTop).LineStyle
-        r = src.Borders(xlEdgeRight).LineStyle
-        b = src.Borders(xlEdgeBottom).LineStyle
-        l = src.Borders(xlEdgeLeft).LineStyle
-    End If
-    HasOuterBorder = Not (t = xlLineStyleNone And r = xlLineStyleNone And b = xlLineStyleNone And l = xlLineStyleNone)
-    Exit Function
-EH:
-    HasOuterBorder = False
 End Function
 
 Private Function FontSizeOfShape(shp As Shape) As Double
