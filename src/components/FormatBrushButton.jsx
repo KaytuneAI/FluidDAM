@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 
-export default function FormatBrushButton({ editor }) {
+export default function FormatBrushButton({ editor, iconSrc }) {
   const [showDialog, setShowDialog] = useState(false);
   const [suggestedSize, setSuggestedSize] = useState({ width: 0, height: 0 });
   const [customSize, setCustomSize] = useState({ width: 0, height: 0 });
@@ -202,9 +202,13 @@ export default function FormatBrushButton({ editor }) {
           alignItems: "center",
           justifyContent: "center"
         }}
-        title="格式刷 - 批量修改选中图片尺寸"
+        title="批量调整尺寸 - 修改选中图片尺寸"
       >
-        🎨
+        {iconSrc ? (
+          <img src={iconSrc} alt="调整尺寸" style={{width: 32, height: 32}} />
+        ) : (
+          '🎨'
+        )}
       </button>
 
       {/* 尺寸设置对话框 */}
