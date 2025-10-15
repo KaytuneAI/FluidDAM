@@ -252,41 +252,41 @@ export default function IntegratedAssetSidebar({ editor, selectedFrame, setIsLoa
             ←
           </button>
         </div>
-        <div style={{display: 'flex', flexDirection: 'column', gap: 4}}>
-          {/* 第一排：3个按钮 */}
-          <div style={{display: 'flex', gap: 4, flexWrap: 'nowrap', alignItems: 'center'}}>
-            <InsertImageButton editor={editor} selectedFrame={selectedFrame} />
-            <LoadCanvasButton editor={editor} setIsLoading={setIsLoading} />
-            <SaveCanvasButton editor={editor} />
-          </div>
-          
-          {/* 第二排：3个按钮 */}
-          <div style={{display: 'flex', gap: 4, flexWrap: 'nowrap', alignItems: 'center'}}>
-            <ShareCanvasButton editor={editor} />
-            <FormatBrushButton editor={editor} iconSrc="/icons/resize.png" />
-            <button 
-              onClick={onReset}
-              style={{
-                fontSize: 12,
-                padding: "2px",
-                border: "0.5px solid #dee2e6",
-                borderRadius: 2,
-                background: "#dee2e6",
-                color: "white",
-                cursor: "pointer",
-                fontWeight: "bold",
-                whiteSpace: "nowrap",
-                width: 40,
-                height: 40,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center"
-              }}
-              title="重置画布 (Ctrl+R)"
-            >
-              <img src="/icons/reset.png" alt="重置画布" style={{width: 32, height: 32}} />
-            </button>
-          </div>
+        <div style={{
+          display: 'flex', 
+          gap: 4, 
+          flexWrap: 'wrap', 
+          alignItems: 'center',
+          justifyContent: 'flex-start'
+        }}>
+          <InsertImageButton editor={editor} selectedFrame={selectedFrame} />
+          <LoadCanvasButton editor={editor} setIsLoading={setIsLoading} />
+          <SaveCanvasButton editor={editor} />
+          <ShareCanvasButton editor={editor} />
+          <FormatBrushButton editor={editor} iconSrc="/icons/resize.png" />
+          <button 
+            onClick={onReset}
+            style={{
+              fontSize: 12,
+              padding: "2px",
+              border: "0.5px solid #dee2e6",
+              borderRadius: 2,
+              background: "#dee2e6",
+              color: "white",
+              cursor: "pointer",
+              fontWeight: "bold",
+              whiteSpace: "nowrap",
+              width: 40,
+              height: 40,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              flexShrink: 0
+            }}
+            title="重置画布 (Ctrl+R)"
+          >
+            <img src="/icons/reset.png" alt="重置画布" style={{width: 32, height: 32}} />
+          </button>
         </div>
       </div>
 

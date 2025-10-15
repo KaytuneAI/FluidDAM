@@ -191,7 +191,7 @@ export default function FormatBrushButton({ editor, iconSrc }) {
           padding: "2px",
           border: "0.5px solid #dee2e6",
           borderRadius: 2,
-          background: "#007bff",
+          background: "#dee2e6",
           color: "white",
           cursor: "pointer",
           fontWeight: "bold",
@@ -205,7 +205,7 @@ export default function FormatBrushButton({ editor, iconSrc }) {
         title="批量调整尺寸 - 修改选中图片尺寸"
       >
         {iconSrc ? (
-          <img src={iconSrc} alt="调整尺寸" style={{width: 32, height: 32}} />
+          <img src={iconSrc} alt="调整尺寸" style={{width: 32, height: 32, border: 'none', outline: 'none'}} />
         ) : (
           '🎨'
         )}
