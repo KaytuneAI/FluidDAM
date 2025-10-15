@@ -157,11 +157,9 @@ export default function MainCanvas() {
       },
       clearSavedData: async () => {
         await storageManager.clearCanvas();
-        console.log('已清除保存的数据');
       },
       getStorageInfo: async () => {
         const info = await storageManager.getStorageInfo();
-        console.log('存储信息:', info);
         return info;
       }
     };
@@ -170,7 +168,6 @@ export default function MainCanvas() {
     console.log('  window.debugCanvas.checkSavedData() - 检查保存的数据');
     console.log('  window.debugCanvas.forceSave() - 强制保存当前画布');
     console.log('  window.debugCanvas.clearSavedData() - 清除保存的数据');
-    console.log('  window.debugCanvas.getStorageInfo() - 查看存储信息');
   }, []);
 
   // 新建画布功能 - 使用快照恢复
@@ -363,12 +360,6 @@ export default function MainCanvas() {
         autoSave: true
       };
       
-      console.log('自动保存画布状态:', {
-        shapesCount: currentShapes.length,
-        imageCount: imageShapes.length,
-        camera: saveData.camera,
-        shapes: currentShapes.map(s => ({ id: s.id, type: s.type }))
-      });
       
       // 检查 canvasData 中的形状
       if (canvasData && canvasData.store) {
@@ -382,7 +373,6 @@ export default function MainCanvas() {
       const result = await storageManager.saveCanvas(saveData);
       
       if (result.success) {
-        console.log(`✅ 画布状态已自动保存 (${result.method}, ${result.size}MB)`);
       } else {
         console.error(`❌ 自动保存失败: ${result.error}`);
         // 延迟输出，确保错误可见
@@ -440,7 +430,6 @@ export default function MainCanvas() {
         return false;
       }
       
-      console.log('开始恢复自动保存的画布状态...');
       console.log('保存的数据结构:', {
         hasCanvasData: !!saveData.canvasData,
         hasCurrentPageId: !!saveData.currentPageId,
@@ -538,7 +527,6 @@ export default function MainCanvas() {
         localStorage.setItem('currentImageIds', JSON.stringify(currentImageIds));
       }
       
-      console.log('自动保存的画布状态恢复成功');
       setIsRestoring(false);
       
       return true;
@@ -613,7 +601,6 @@ export default function MainCanvas() {
     const handleBeforeUnload = (event) => {
       if (editorRef.current) {
         try {
-          console.log('页面即将关闭/刷新，立即保存画布状态...');
           
           // 强制同步保存，确保数据不丢失
           const canvasData = getSnapshot(editorRef.current.store);
@@ -657,7 +644,6 @@ export default function MainCanvas() {
           };
           
           localStorage.setItem('autoSaveCanvas', JSON.stringify(saveData));
-          console.log('页面关闭前已保存画布状态（包含视图信息）');
           
           // 可选：显示确认对话框（仅在用户主动关闭时）
           if (event.type === 'beforeunload') {
@@ -711,7 +697,6 @@ export default function MainCanvas() {
             // 清除自动保存数据
             localStorage.removeItem('autoSaveCanvas');
             localStorage.removeItem('currentImageIds');
-            console.log('已清除自动保存数据');
             
             // 重置视图
             editorRef.current.resetZoom();
@@ -959,21 +944,13 @@ export default function MainCanvas() {
       const assetSrc = e.dataTransfer.getData('application/asset-src');
       const assetName = e.dataTransfer.getData('application/asset-name');
       
-      console.log('拖拽素材到画布:', { assetId, assetSrc, assetName });
-      console.log('资产ID格式检查:', { 
-        original: assetId, 
-        hasAssetPrefix: assetId.startsWith('asset:'),
-        normalized: assetId.startsWith('asset:') ? assetId : `asset:${assetId}`
-      });
       
       // 检查资产是否真的存在
       if (editorRef.current) {
         const asset = editorRef.current.getAsset(assetId);
-        console.log('原始资产检查:', asset);
         
         const normalizedAssetId = assetId.startsWith('asset:') ? assetId : `asset:${assetId}`;
         const normalizedAsset = editorRef.current.getAsset(normalizedAssetId);
-        console.log('标准化资产检查:', normalizedAsset);
       }
       
       if (assetId && editorRef.current) {
@@ -1043,12 +1020,9 @@ export default function MainCanvas() {
           if (shapeId) {
             setTimeout(() => {
               const createdShape = editorRef.current.getShape(shapeId);
-              console.log('创建的图片形状详情:', createdShape);
-              console.log('形状的assetId:', createdShape?.props?.assetId);
               
               // 检查资产是否存在
               const asset = editorRef.current.getAsset(normalizedAssetId);
-              console.log('关联的资产:', asset);
             }, 100);
           }
         } catch (error) {
@@ -1175,16 +1149,13 @@ export default function MainCanvas() {
         const assetSrc = e.dataTransfer.getData('application/asset-src');
         const assetName = e.dataTransfer.getData('application/asset-name');
         
-        console.log('全局拖拽素材到画布:', { assetId, assetSrc, assetName });
         
         // 检查资产是否真的存在
         if (editorRef.current) {
           const asset = editorRef.current.getAsset(assetId);
-          console.log('全局拖拽原始资产检查:', asset);
           
           const normalizedAssetId = assetId.startsWith('asset:') ? assetId : `asset:${assetId}`;
           const normalizedAsset = editorRef.current.getAsset(normalizedAssetId);
-          console.log('全局拖拽标准化资产检查:', normalizedAsset);
         }
         
         if (assetId && editorRef.current) {
@@ -1254,12 +1225,9 @@ export default function MainCanvas() {
             if (shapeId) {
               setTimeout(() => {
                 const createdShape = editorRef.current.getShape(shapeId);
-                console.log('全局拖拽创建的图片形状详情:', createdShape);
-                console.log('形状的assetId:', createdShape?.props?.assetId);
                 
                 // 检查资产是否存在
                 const asset = editorRef.current.getAsset(normalizedAssetId);
-                console.log('关联的资产:', asset);
               }, 100);
             }
           } catch (error) {
@@ -1438,7 +1406,6 @@ export default function MainCanvas() {
               const snapshot = getSnapshot(store);
               pristineSnapshotRef.current = snapshot;
               snapshotSavedRef.current = true;
-              console.log('已保存干净初始态快照');
             } catch (error) {
               console.error('保存初始快照失败:', error);
             }

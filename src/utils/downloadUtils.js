@@ -130,7 +130,6 @@ export function downloadText(text, fileName, mimeType = 'text/plain') {
  */
 export function showDownloadNotification(fileName, success = true) {
   if (success) {
-    console.log(`文件已保存: ${fileName}`);
     
     // 可以在这里添加更友好的用户提示
     // 比如显示一个toast通知

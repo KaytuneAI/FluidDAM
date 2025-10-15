@@ -304,11 +304,6 @@ export default function LoadCanvasButton({ editor, setIsLoading }) {
     
     // 按Z-order排序，Z值小的先创建（在底层）
     const sortedElements = allElements.sort((a, b) => a.z - b.z);
-    console.log('所有元素Z-order排序:', sortedElements.map(el => ({ 
-      type: el.type, 
-      name: el.data.name, 
-      z: el.z 
-    })));
     
     // 3. 首先提取图片数据
     let extractedImages = [];
@@ -408,7 +403,6 @@ export default function LoadCanvasButton({ editor, setIsLoading }) {
         const naturalW = img.naturalWidth || imageInfo.width;
         const naturalH = img.naturalHeight || imageInfo.height;
         
-        console.log(`🖼️ Asset尺寸分析: 自然尺寸${naturalW}×${naturalH}, Excel尺寸${imageInfo.width}×${imageInfo.height}`);
         
         // 保存原始尺寸信息到imageData中，供后续contain-fit计算使用
         imageData.naturalWidth = naturalW;
@@ -445,7 +439,6 @@ export default function LoadCanvasButton({ editor, setIsLoading }) {
       const naturalW = imageData.naturalWidth || imageInfo.width;
       const naturalH = imageData.naturalHeight || imageInfo.height;
       
-      console.log(`🔍 图片分析: Excel尺寸${imageInfo.width}×${imageInfo.height}, 原始尺寸${naturalW}×${naturalH}`);
       
       // === REPLACE: 使用 contain-fit 计算最终 x/y/w/h ===
       const { x, y, w, h } = computeContainFit(
@@ -458,10 +451,6 @@ export default function LoadCanvasButton({ editor, setIsLoading }) {
         2              // 基础 padding，可按需 2~6
       );
       
-      console.log(`📐 Contain-fit处理:`);
-      console.log(`   Excel位置/尺寸: (${imageInfo.left}, ${imageInfo.top}) ${imageInfo.width}×${imageInfo.height}`);
-      console.log(`   Contain-fit后: (${x}, ${y}) ${w}×${h}`);
-      console.log(`   缩放比例: ${(w/naturalW).toFixed(3)}x (宽) / ${(h/naturalH).toFixed(3)}x (高)`);
       
       const imageShape = {
         type: 'image',
@@ -511,12 +500,6 @@ export default function LoadCanvasButton({ editor, setIsLoading }) {
           const finalColor = tlColor;
           
           // 调试信息：显示单元格颜色映射结果
-          console.log('🎨 单元格颜色映射:', {
-            内容: cell.v || '无内容',
-            原始颜色: cell.fillColor || '无背景色',
-            映射颜色: finalColor,
-            填充模式: finalColor === 'none' ? 'none' : 'solid'
-          });
           
           // 创建单元格背景色（最底层，Z-order = -1000）
           // 使用hasVisibleFill函数判断是否绘制背景矩形
@@ -752,7 +735,6 @@ export default function LoadCanvasButton({ editor, setIsLoading }) {
         if (element.type === 'textbox') {
           // 创建文本框
           const textbox = element.data;
-          console.log('🔤 开始处理文本框:', textbox.name, '数据:', textbox);
           
           // 检查是否有真正的边框或填充
           const hasBorder = textbox.border && textbox.border.style !== 'none';
@@ -800,7 +782,6 @@ export default function LoadCanvasButton({ editor, setIsLoading }) {
           // 检查是否有富媒体格式信息
           if (textbox.richTextFormatting && textbox.richTextFormatting.length > 0) {
             hasRichFormatting = true;
-            console.log('🎨 检测到富媒体文本格式，寻找最小字体:', textbox.richTextFormatting);
             
             // 找到最小的字体大小
             let minFontSize = Infinity;
@@ -830,7 +811,6 @@ export default function LoadCanvasButton({ editor, setIsLoading }) {
             textbox.richTextFormatting.forEach((format, index) => {
               const segment = textbox.text.substring(format.start, format.end + 1);
               const isMinSize = format.fontSize === minFontSize;
-              console.log(`  段${index + 1}: "${segment}" (${format.start}-${format.end}) - ${format.fontName} ${format.fontSize}pt ${format.color} ${isMinSize ? '← 最小' : ''}`);
             });
           } else {
             // 没有富媒体格式，使用默认格式
@@ -857,11 +837,6 @@ export default function LoadCanvasButton({ editor, setIsLoading }) {
             }
           };
           
-          console.log('✅ 创建文本形状:');
-          console.log('  名称:', textbox.name);
-          console.log('  文本:', textbox.text.substring(0, 50) + (textbox.text.length > 50 ? '...' : ''));
-          console.log('  富媒体格式:', hasRichFormatting ? '是（已使用最小字体）' : '否');
-          console.log('  显示格式:', `${mainFont} ${mainSize} ${mainColor}`);
           
           editor.createShape(textShape);
           // 文本框创建完成
@@ -942,7 +917,6 @@ export default function LoadCanvasButton({ editor, setIsLoading }) {
     
     // 6. 最后创建单元格文本（按Z-order顺序，但确保在单元格底色之上）
     if (layoutData.sheet && layoutData.sheet.cells) {
-      console.log('开始创建单元格文本（按Z-order顺序）:', layoutData.sheet.cells.length);
       
       for (const cell of layoutData.sheet.cells) {
         try {
@@ -954,7 +928,6 @@ export default function LoadCanvasButton({ editor, setIsLoading }) {
           
           // 如果有内容，添加文本
           if (cell.v && cell.v.trim()) {
-            console.log('📝 开始处理单元格文本:', cell.v, '数据:', cell);
             // 如果 JSON 里也记录了 cell 的字体与字号，就取；没有则给合理默认
             const cellFontName = cell.fontName || (cell.font && cell.font.name) || 'Microsoft YaHei';
             const cellFontSize = cell.fontSize || (cell.font && cell.font.size) || 11;
@@ -968,19 +941,6 @@ export default function LoadCanvasButton({ editor, setIsLoading }) {
             }
 
             // 调试信息：显示单元格字体映射结果
-            console.log('📝 单元格字体映射详情:');
-            console.log('  内容:', cell.v);
-            console.log('  原始字体:', cellFontName || '未设置');
-            console.log('  原始字号:', cellFontSize || '未设置');
-            console.log('  原始颜色:', cellColorHex || '未设置');
-            console.log('  原始水平对齐:', cell.hAlign || '未设置');
-            console.log('  处理后水平对齐:', cellHAlign || '未设置');
-            console.log('  垂直对齐:', cellVAlign || '未设置');
-            console.log('  是否合并单元格:', cell.isMerged || false);
-            console.log('  合并区域:', cell.mergeArea || '无');
-            console.log('  映射字体:', mapExcelFontToTL(cellFontName));
-            console.log('  映射字号:', mapPtToTLSize(cellFontSize));
-            console.log('  映射颜色:', normalizeTextColor(cellColorHex));
 
             // 使用精准对齐函数创建文本
             await placeTextWithAlignment(editor, {
@@ -1650,12 +1610,10 @@ async function placeTextWithAlignment(editor, {
   if (minY <= maxY) y = Math.max(minY, Math.min(y, maxY))
 
   // 调试信息：输出计算过程
-  console.log(`🎯 文本对齐调试: "${text}"`);
   console.log(`  单元格: x=${cellX}, y=${cellY}, w=${cellW}, h=${cellH}`);
   console.log(`  字形真实宽度: ${contentW}`);
   console.log(`  最终宽度: ${finalW}`);
   console.log(`  最终高度: ${textH}`);
-  console.log(`  对齐方式: hAlign=${hAlign}, vAlign=${vAlign}`);
   console.log(`  计算位置: x=${x}, y=${y}`);
   console.log(`  边界检查: minX=${minX}, maxX=${maxX}, minY=${minY}, maxY=${maxY}`);
 

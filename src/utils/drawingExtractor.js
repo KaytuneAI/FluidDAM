@@ -147,7 +147,6 @@ export async function extractDrawingMLElements(worksheet, zip, opts = {}) {
     console.warn('DrawingML解析失败:', error);
   }
   
-  console.log(`DrawingML解析完成: ${drawingTexts.length}个文本框, ${drawingImages.length}个图片`);
   // console.log(`✅ 修复验证: 只解析了worksheet ${sheetIndex} 关联的drawing文件，避免了加载其他sheet的文本框`);
   return { texts: drawingTexts, images: drawingImages };
 }
@@ -187,7 +186,6 @@ export async function extractImages(worksheet) {
       }
     }
     
-    console.log('最终图片数组:', worksheetImages);
     
     // 处理图片数据
     for (const image of worksheetImages) {
@@ -212,7 +210,6 @@ export async function extractImages(worksheet) {
         if (processedImages.has(imageId)) {
           const originalId = imageId;
           imageId = `${imageId}_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
-          console.log(`检测到重复图片ID: ${originalId}，生成新ID: ${imageId}`);
         }
         processedImages.add(imageId);
         
@@ -231,7 +228,6 @@ export async function extractImages(worksheet) {
         // 如果getImage()失败，使用图片对象本身
         if (!imageData) {
           imageData = image;
-          console.log('使用图片对象本身作为数据:', imageData);
         }
         
         // 如果仍然没有数据，尝试其他方法
@@ -478,7 +474,6 @@ export async function extractImages(worksheet) {
             position: image.position
           });
           
-          console.log(`成功添加图片: ${imageId}, 尺寸: ${width}x${height}, 位置: (${x}, ${y})`);
         }
       } catch (error) {
         console.warn(`处理图片失败:`, error);

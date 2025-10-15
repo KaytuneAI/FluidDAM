@@ -68,7 +68,6 @@ export class ExcelShapeCreator {
   fitTextboxesIntoFrames(texts, frames, padding = 4) {
     // Fidelity-first 模式：直接返回原始文本框，不做任何适配处理
     if (this.dependencies.PRESERVE_EXCEL_LAYOUT) {
-      console.log(`Fidelity-first模式：保持Excel原始布局，跳过文本框适配处理`);
       return texts.map(text => this.maybeSnapToFrame(text, frames));
     }
 
@@ -135,7 +134,6 @@ export class ExcelShapeCreator {
    * @param {number} padding - 内边距，默认8像素
    */
   fitImagesIntoFrames(images, frames, padding = 0) {
-    console.log(`⚠️ ExcelJS路径的图片处理已禁用，请使用VBA路径`);
     return images;
   }
 
@@ -144,15 +142,9 @@ export class ExcelShapeCreator {
   fitImagesIntoFrames_original(images, frames, padding = 0) {
     // Fidelity-first 模式：直接返回原始图片，不做任何适配处理
     if (this.dependencies.PRESERVE_EXCEL_LAYOUT) {
-      console.log(`🔄 Fidelity-first模式：保持Excel原始布局，跳过图片适配处理`);
-      console.log(`📊 图片适配前状态:`);
-      images.forEach((img, index) => {
-        console.log(`   图片 ${index + 1}: 原始尺寸 ${img.originalWidth}x${img.originalHeight}px, 显示尺寸 ${img.width}x${img.height}px`);
-      });
       return images.map(img => this.maybeSnapToFrame(img, frames));
     }
 
-    console.log(`开始处理 ${images.length} 张图片，${frames.length} 个框架`);
     
     for (let i = 0; i < images.length; i++) {
       const img = images[i];
@@ -160,13 +152,11 @@ export class ExcelShapeCreator {
       const ow = Math.max(1, img.originalWidth || img.width || 1);
       const oh = Math.max(1, img.originalHeight || img.height || 1);
 
-      console.log(`处理图片 ${i + 1}: 原始尺寸 ${ow}x${oh}, 当前位置 (${img.x}, ${img.y}), 当前尺寸 ${img.width}x${img.height}`);
 
       // 查找所有包含此图片的框架（可能横跨多个格子）
       const containingFrames = this.findAllContainingFrames(frames, img);
       
       if (containingFrames.length === 0) {
-        console.log(`图片 ${i + 1}: 未找到包含的框架，保持原始位置和尺寸`);
         // 不在任何格子内的图片，保持原始位置和尺寸，只应用缩放
         img.x = Math.round(img.x);
         img.y = Math.round(img.y);
@@ -177,7 +167,6 @@ export class ExcelShapeCreator {
 
       // 如果图片横跨多个框架，计算合并后的边界
       const combinedBounds = this.calculateCombinedBounds(containingFrames);
-      console.log(`图片 ${i + 1}: 找到 ${containingFrames.length} 个框架，合并边界: ${combinedBounds.width}x${combinedBounds.height}, 位置 (${combinedBounds.x}, ${combinedBounds.y})`);
 
       const maxW = Math.max(0, combinedBounds.width - padding * 2);
       const maxH = Math.max(0, combinedBounds.height - padding * 2);
@@ -190,7 +179,6 @@ export class ExcelShapeCreator {
                       (excelBoxW > maxW * 1.5 || excelBoxH > maxH * 1.5) &&
                       (excelBoxW > 200 || excelBoxH > 200); // 绝对尺寸也要足够大
       
-      console.log(`图片 ${i + 1}: Excel尺寸 ${excelBoxW}x${excelBoxH}, 合并容器最大尺寸 ${maxW}x${maxH}, 是否为横幅: ${isBanner}`);
       
       if (isBanner) {
         // 横幅图片：保持原始Excel尺寸，但确保不超出合并边界
@@ -205,7 +193,6 @@ export class ExcelShapeCreator {
         const nx = combinedBounds.x + (combinedBounds.width - dw) / 2;
         const ny = combinedBounds.y + (combinedBounds.height - dh) / 2;
         
-        console.log(`图片 ${i + 1}: 横幅处理 - 缩放比例 ${scale}, 新尺寸 ${dw}x${dh}, 新位置 (${nx}, ${ny})`);
         
         img.x = Math.round(nx);
         img.y = Math.round(ny);
@@ -213,7 +200,6 @@ export class ExcelShapeCreator {
         img.height = Math.round(dh);
       } else {
         // 单格子图片：创建真正的TLDraw frame shape并使用fit to frame功能
-        console.log(`图片 ${i + 1}: 单格子图片，创建真正的TLDraw frame shape`);
         
         // 创建真正的TLDraw frame shape
         const frameShape = {
@@ -229,7 +215,6 @@ export class ExcelShapeCreator {
         
         // 使用TLDraw创建真正的frame shape
         const frameId = this.editor.createShape(frameShape);
-        console.log(`图片 ${i + 1}: 创建了真正的TLDraw frame shape: ${frameId}`);
         
         // 创建frame信息对象用于后续处理
         const cellFrame = {
@@ -247,7 +232,6 @@ export class ExcelShapeCreator {
         const existingFrame = frames.find(f => f.id === frameId);
         if (!existingFrame) {
           frames.push(cellFrame);
-          console.log(`图片 ${i + 1}: 添加frame到数组，尺寸 ${cellFrame.width}x${cellFrame.height}`);
         }
         
         // 使用fit to frame功能将图片适配到frame中
@@ -261,11 +245,9 @@ export class ExcelShapeCreator {
         img.frameId = frameId; // 记录真正的TLDraw frame ID
         img.parentId = frameId; // 设置parent关系
         
-        console.log(`图片 ${i + 1}: fit to frame完成 - 新尺寸 ${img.width}x${img.height}, 位置 (${img.x}, ${img.y}), 父frame: ${frameId}`);
       }
     }
     
-    console.log('图片尺寸调整完成');
     return images; // 返回处理后的图片数组
   }
 
@@ -413,10 +395,6 @@ export class ExcelShapeCreator {
                 2 // padding: 2px
               );
               
-              console.log(`📐 Contain-fit处理:`);
-              console.log(`   Excel位置/尺寸: (${drawX.toFixed(1)}, ${drawY.toFixed(1)}) ${drawW.toFixed(1)}×${drawH.toFixed(1)}`);
-              console.log(`   Contain-fit后: (${finalX.toFixed(1)}, ${finalY.toFixed(1)}) ${finalW.toFixed(1)}×${finalH.toFixed(1)}`);
-              console.log(`   缩放比例: ${(finalW/naturalWidth).toFixed(3)}x (宽) / ${(finalH/naturalHeight).toFixed(3)}x (高)`);
               
               if (isNaN(finalX) || isNaN(finalY) || isNaN(finalW) || isNaN(finalH) || finalW <= 0 || finalH <= 0) {
                 console.warn('图片元素坐标无效，跳过:', { 
@@ -491,7 +469,6 @@ export class ExcelShapeCreator {
                 lineHeight: 1.35
               });
               
-              console.log(`文本框适配: 原字号${fitConfig.originalPt}pt -> 适配字号${fitConfig.fitPt}pt, 行数${fitConfig.lines.length}`);
               
               // 创建白底矩形（可选）
               const backgroundColor = element.fill?.color || '#FFFFFF';
@@ -648,13 +625,11 @@ export class ExcelShapeCreator {
       return;
     }
 
-    console.log(`开始后处理 ${textElements.length} 个文本形状...`);
     
     // 获取当前页面的所有文本形状
     const currentPageShapes = this.editor.getCurrentPageShapes();
     const textShapes = currentPageShapes.filter(shape => shape.type === 'text');
     
-    console.log(`找到 ${textShapes.length} 个文本形状进行后处理`);
     
     for (const textShape of textShapes) {
       try {
@@ -685,7 +660,6 @@ export class ExcelShapeCreator {
       }
     }
     
-    console.log('文本形状后处理完成');
   }
 
   // 工具方法

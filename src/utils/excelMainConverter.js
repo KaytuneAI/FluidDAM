@@ -45,9 +45,7 @@ export class ExcelMainConverter {
       // console.log('工作表尺寸:', worksheet.rowCount, 'x', worksheet.columnCount);
       
       // 先提取图片，然后进行布局分析
-      console.log('开始提取图片...');
       const images = await this.dependencies.extractImages(worksheet);
-      console.log('提取到图片数量:', images.length);
       
       // 使用DrawingML解析器提取文本框和图片
       // console.log('开始使用DrawingML解析器提取元素...');
@@ -75,7 +73,6 @@ export class ExcelMainConverter {
       // console.log('合并单元格数量:', mergedCells.length);
       
       // 2. 图片已在上面提取完成
-      console.log('图片详情:', images);
       
       // 3. 提取文字元素
       // console.log('开始提取文字...');
@@ -172,7 +169,6 @@ export class ExcelMainConverter {
       
       // 3. 创建图片（放在框之上，不入frame）
       if (adjustedImages.length > 0) {
-        console.log('开始创建图片形状...');
         await this.dependencies.createShapesBatch(adjustedImages, 'image');
       }
       

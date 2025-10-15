@@ -475,7 +475,6 @@ export class ExcelToTLDrawConverter {
       console.warn('DrawingML解析失败:', error);
     }
     
-      console.log(`DrawingML解析完成: ${drawingTexts.length}个文本框, ${drawingImages.length}个图片`);
       // console.log(`✅ 修复验证: 只解析了worksheet ${sheetIndex} 关联的drawing文件，避免了加载其他sheet的文本框`);
       return { texts: drawingTexts, images: drawingImages };
   }
@@ -691,7 +690,6 @@ export class ExcelToTLDrawConverter {
     const textOverlays = [];
     
     try {
-      console.log('开始添加图片文字覆盖层...');
       
       // 查找THE MACALLAN横幅图片
       const macallanImage = images.find(img => 

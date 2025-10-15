@@ -28,7 +28,6 @@ class StorageManager {
     try {
       this.db = await this.openDatabase();
       this.isIndexedDBAvailable = true;
-      console.log('✅ IndexedDB 初始化成功（支持大容量存储）');
     } catch (error) {
       console.warn('IndexedDB 初始化失败，使用 localStorage:', error);
       this.isIndexedDBAvailable = false;
@@ -51,7 +50,6 @@ class StorageManager {
         // 创建对象存储
         if (!db.objectStoreNames.contains(STORE_NAME)) {
           db.createObjectStore(STORE_NAME);
-          console.log('创建 IndexedDB 对象存储');
         }
       };
     });
@@ -72,7 +70,6 @@ class StorageManager {
     if (this.isIndexedDBAvailable) {
       try {
         await this.saveToIndexedDB(dataString);
-        console.log(`✅ 已保存到 IndexedDB (${dataSizeMB}MB)`);
         return { success: true, method: 'IndexedDB', size: dataSizeMB };
       } catch (error) {
         console.warn('IndexedDB 保存失败，尝试 localStorage:', error);
@@ -82,7 +79,6 @@ class StorageManager {
     // 回退到 localStorage（有容量限制）
     try {
       await this.saveToLocalStorage(dataString, dataSizeMB);
-      console.log(`✅ 已保存到 localStorage (${dataSizeMB}MB)`);
       return { success: true, method: 'localStorage', size: dataSizeMB };
     } catch (error) {
       console.error('❌ 所有存储方式都失败了:', error);
@@ -198,7 +194,6 @@ class StorageManager {
           request.onsuccess = () => resolve();
           request.onerror = () => reject(request.error);
         });
-        console.log('已清除 IndexedDB 数据');
       } catch (error) {
         console.warn('清除 IndexedDB 失败:', error);
       }
@@ -207,7 +202,6 @@ class StorageManager {
     // 清除 localStorage
     localStorage.removeItem(CANVAS_KEY);
     localStorage.removeItem('currentImageIds');
-    console.log('已清除 localStorage 数据');
   }
 
   /**

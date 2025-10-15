@@ -602,7 +602,6 @@ async function parseDrawingML(zip, drawingPath, dims, opts = {}) {
         rect: rect,
         type: a['xdr:pic'] ? 'image' : a['xdr:sp'] ? 'text' : 'shape'
       });
-      console.log(`跳过${a['xdr:pic'] ? '图片' : a['xdr:sp'] ? '文本框' : '形状'}: ${filterResult.reason}`, rect);
       continue;
     }
 
@@ -663,7 +662,6 @@ async function parseDrawingML(zip, drawingPath, dims, opts = {}) {
     results.shapes.push({ rect, kind: 'rect' });
   }
 
-  console.log(`DrawingML解析完成: ${results.texts.length}个文本框, ${results.images.length}个图片, ${results.shapes.length}个形状, ${results.picAnchors.length}个图片锚点, ${results.skipped.length}个被跳过`);
   
   // 显示跳过的元素统计
   const skipStats = {};

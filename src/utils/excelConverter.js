@@ -828,7 +828,6 @@ export class ExcelToTLDrawConverter {
       const drawingMLElements = await this.extractDrawingMLElements(worksheet, zip);
       
       if (drawingMLElements.skipped && drawingMLElements.skipped.length > 0) {
-        console.log(`跳过了${drawingMLElements.skipped.length}个DrawingML元素`);
       }
       
       // 提取图片
@@ -841,19 +840,15 @@ export class ExcelToTLDrawConverter {
       
       // 提取文本
       const cellTexts = this.extractTexts(worksheet, mergedCells, images);
-      console.log(`提取到${cellTexts.length}个单元格文本`);
       
       // 提取DrawingML文本
       const drawingTexts = drawingMLElements.texts || [];
-      console.log(`提取到${drawingTexts.length}个DrawingML文本`);
       
       // 提取矩形文本
       const rectangleTexts = this.extractRectangleTexts(worksheet);
-      console.log(`提取到${rectangleTexts.length}个矩形文本`);
       
       // 合并所有文本
       const allTexts = [...cellTexts, ...drawingTexts, ...rectangleTexts];
-      console.log(`总共${allTexts.length}个文本元素`);
       
       // 分析布局结构
       const layoutInfo = this.analyzeLayoutStructure(worksheet, images);

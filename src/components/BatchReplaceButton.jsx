@@ -168,9 +168,9 @@ export default function BatchReplaceButton({ editor, assetId, assetName }) {
         style={{
           fontSize: 12,
           padding: "4px 8px",
-          border: "1px solid #007bff",
+          border: "1px solid #6c757d",
           borderRadius: 4,
-          background: "#007bff",
+          background: "#6c757d",
           color: "white",
           cursor: "pointer",
           fontWeight: "500",

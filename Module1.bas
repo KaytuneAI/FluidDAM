@@ -72,7 +72,7 @@ Public Sub ExportLayoutWin()
     End If
     
     ' 新增：将JSON保存为文件到Excel文件同目录
-    SaveJsonToFile wb, json, ws.Name
+    ' SaveJsonToFile wb, json, ws.Name  ' 已注释：暂时禁用本地JSON文件保存功能
     
     tgt.Columns("A").ColumnWidth = 120    ' just for readability
 
@@ -1718,48 +1718,49 @@ End Function
 
 ' ================ JSON文件保存功能 =================
 ' 将JSON保存为文件到Excel文件同目录
-Private Sub SaveJsonToFile(ByVal wb As Workbook, ByVal json As String, ByVal sheetName As String)
-    On Error Resume Next
-    
-    Dim filePath As String
-    Dim fileName As String
-    Dim fso As Object
-    Dim textFile As Object
-    
-    ' 保存到C盘根目录
-    filePath = "C:\"
-    
-    ' 调试信息：显示路径信息
-    Debug.Print "Excel文件路径: " & wb.FullName
-    Debug.Print "Excel文件目录: " & wb.Path
-    Debug.Print "当前工作目录: " & ThisWorkbook.Path
-    Debug.Print "JSON保存目录: " & filePath
-    
-    ' 生成文件名：原文件名_工作表名_时间戳.json
-    fileName = Replace(wb.Name, ".xlsx", "") & "_" & Replace(sheetName, " ", "_") & "_" & Format(Now, "yyyymmdd_hhmmss") & ".json"
-    filePath = filePath & fileName
-    
-    ' 调试信息：显示完整文件路径
-    Debug.Print "JSON文件完整路径: " & filePath
-    
-    ' 创建文件系统对象
-    Set fso = CreateObject("Scripting.FileSystemObject")
-    Set textFile = fso.CreateTextFile(filePath, True)
-    
-    ' 写入JSON内容
-    textFile.Write json
-    textFile.Close
-    
-    ' 显示保存成功消息
-    Debug.Print "JSON已保存到文件: " & filePath
-    MsgBox "JSON已保存到文件:" & vbCrLf & vbCrLf & "保存目录: C:\" & vbCrLf & "文件名: " & fileName & vbCrLf & vbCrLf & "完整路径: " & filePath & vbCrLf & vbCrLf & "请在C盘根目录中查找JSON文件！", vbInformation, "JSON文件保存成功"
-    
-    ' 清理对象
-    Set textFile = Nothing
-    Set fso = Nothing
-    
-    On Error GoTo 0
-End Sub
+' 已注释：暂时禁用本地JSON文件保存功能
+' Private Sub SaveJsonToFile(ByVal wb As Workbook, ByVal json As String, ByVal sheetName As String)
+'     On Error Resume Next
+'     
+'     Dim filePath As String
+'     Dim fileName As String
+'     Dim fso As Object
+'     Dim textFile As Object
+'     
+'     ' 保存到C盘根目录
+'     filePath = "C:\"
+'     
+'     ' 调试信息：显示路径信息
+'     Debug.Print "Excel文件路径: " & wb.FullName
+'     Debug.Print "Excel文件目录: " & wb.Path
+'     Debug.Print "当前工作目录: " & ThisWorkbook.Path
+'     Debug.Print "JSON保存目录: " & filePath
+'     
+'     ' 生成文件名：原文件名_工作表名_时间戳.json
+'     fileName = Replace(wb.Name, ".xlsx", "") & "_" & Replace(sheetName, " ", "_") & "_" & Format(Now, "yyyymmdd_hhmmss") & ".json"
+'     filePath = filePath & fileName
+'     
+'     ' 调试信息：显示完整文件路径
+'     Debug.Print "JSON文件完整路径: " & filePath
+'     
+'     ' 创建文件系统对象
+'     Set fso = CreateObject("Scripting.FileSystemObject")
+'     Set textFile = fso.CreateTextFile(filePath, True)
+'     
+'     ' 写入JSON内容
+'     textFile.Write json
+'     textFile.Close
+'     
+'     ' 显示保存成功消息
+'     Debug.Print "JSON已保存到文件: " & filePath
+'     MsgBox "JSON已保存到文件:" & vbCrLf & vbCrLf & "保存目录: C:\" & vbCrLf & "文件名: " & fileName & vbCrLf & vbCrLf & "完整路径: " & filePath & vbCrLf & vbCrLf & "请在C盘根目录中查找JSON文件！", vbInformation, "JSON文件保存成功"
+'     
+'     ' 清理对象
+'     Set textFile = Nothing
+'     Set fso = Nothing
+'     
+'     On Error GoTo 0
+' End Sub
 
 
 

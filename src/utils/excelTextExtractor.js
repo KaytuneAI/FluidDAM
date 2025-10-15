@@ -434,7 +434,6 @@ export class ExcelTextExtractor {
     const textOverlays = [];
     
     try {
-      console.log('开始添加图片文字覆盖层...');
       
       // 查找THE MACALLAN横幅图片
       const macallanImage = images.find(img => 

@@ -152,8 +152,6 @@ export default function IntegratedAssetSidebar({ editor, selectedFrame, setIsLoa
           }
         }
         
-        console.log('更新资产列表:', assets.length, '个图片资产');
-        console.log('从', imageShapes.length, '个图片形状中提取');
         setAssets(assets);
       } catch (error) {
         console.error('更新资产列表时出错:', error);

@@ -102,7 +102,6 @@ export default function InsertImageButton({ editor, selectedFrame }) {
           
           // 根据官方文档，不需要手动创建资产
           // Tldraw会在创建图片形状时自动处理资产
-          console.log('准备创建图片形状，让Tldraw自动处理资产');
 
           // 计算初始位置 - 直接放在frame中
           let initialX = 0, initialY = 0;
@@ -151,12 +150,9 @@ export default function InsertImageButton({ editor, selectedFrame }) {
 
           // 根据官方文档，使用正确的方式创建图片
           try {
-            console.log('开始创建资产，dataUrl长度:', dataUrl.length);
-            console.log('editor可用方法:', Object.keys(editor).filter(k => k.includes('Asset') || k.includes('asset') || k.includes('create')));
             
             // 检查editor是否有createAsset方法
             if (typeof editor.createAsset !== 'function') {
-              console.log('editor.createAsset 不存在，尝试其他方法');
               
               // 尝试使用store.put创建资产
               const assetId = `asset:${(globalThis.crypto?.randomUUID?.() || Math.random().toString(36).slice(2))}`;
@@ -178,7 +174,6 @@ export default function InsertImageButton({ editor, selectedFrame }) {
                 }
               ]);
               
-              console.log('使用store.put创建资产成功:', assetId);
               
               // 创建图片形状
               const shapeId = editor.createShape({
@@ -208,15 +203,12 @@ export default function InsertImageButton({ editor, selectedFrame }) {
               }
             });
             
-            console.log('资产创建成功:', asset);
             
             // 验证资产是否真的被创建
             setTimeout(() => {
               const snap = getSnapshot(editor.store);
               const allAssets = Object.values(snap.assets || {});
               const createdAsset = allAssets.find(a => a.id === asset.id);
-              console.log('验证资产创建:', createdAsset ? '成功' : '失败', createdAsset);
-              console.log('当前所有资产数量:', allAssets.length);
             }, 100);
             
             // 然后创建图片形状，使用asset.id
