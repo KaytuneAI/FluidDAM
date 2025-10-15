@@ -89,6 +89,7 @@ export default function MainCanvas() {
   const [sidebarWidth, setSidebarWidth] = useState(280);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [dragOver, setDragOver] = useState(false);
+  const [scrollToAssetId, setScrollToAssetId] = useState(null);
   // 移除保存状态指示器，不再显示任何提示
   const [isAutoSaving, setIsAutoSaving] = useState(false);
   // 刷新恢复状态
@@ -1461,6 +1462,15 @@ export default function MainCanvas() {
                 const selectedShape = editor.getShape(selectedShapeIds[0]);
                 if (selectedShape && selectedShape.type === 'frame') {
                   setSelectedFrame(selectedShape);
+                } else if (selectedShape && selectedShape.type === 'image') {
+                  // 如果选中的是图片，触发滚动到素材面板
+                  const assetId = selectedShape.props?.assetId;
+                  if (assetId) {
+                    setScrollToAssetId(assetId);
+                    // 重置状态，避免重复触发
+                    setTimeout(() => setScrollToAssetId(null), 100);
+                  }
+                  setSelectedFrame(null);
                 } else {
                   setSelectedFrame(null);
                 }
@@ -1538,6 +1548,7 @@ export default function MainCanvas() {
             onReset={handleResetCanvas}
             collapsed={sidebarCollapsed}
             onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
+            onScrollToAsset={scrollToAssetId}
           />
         </ResizableSidebar>
       )}

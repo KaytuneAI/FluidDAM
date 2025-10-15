@@ -6,14 +6,17 @@ import LoadCanvasButton from './LoadCanvasButton.jsx';
 import SaveCanvasButton from './SaveCanvasButton.jsx';
 import ShareCanvasButton from './ShareCanvasButton.jsx';
 import FormatBrushButton from './FormatBrushButton.jsx';
+import BatchReplaceButton from './BatchReplaceButton.jsx';
 
-export default function IntegratedAssetSidebar({ editor, selectedFrame, setIsLoading, platform = "TM", width, onReset, collapsed, onToggleCollapse }) {
+export default function IntegratedAssetSidebar({ editor, selectedFrame, setIsLoading, platform = "TM", width, onReset, collapsed, onToggleCollapse, onScrollToAsset }) {
   const [usedAssetIds, setUsedAssetIds] = useState(new Set());
   const [assets, setAssets] = useState([]);
   const [forceUpdate, setForceUpdate] = useState(0);
+  const [highlightedAssetId, setHighlightedAssetId] = useState(null);
   
   // 去抖定时器引用
   const debounceTimerRef = useRef(null);
+  const assetListRef = useRef(null);
 
   // 更新已使用的资产ID
   const updateUsedAssetIds = useCallback(() => {
@@ -26,6 +29,33 @@ export default function IntegratedAssetSidebar({ editor, selectedFrame, setIsLoa
       // 静默处理错误
     }
   }, [editor]);
+
+  // 滚动到指定素材并高亮
+  const scrollToAsset = useCallback((assetId) => {
+    if (!assetListRef.current) return;
+    
+    try {
+      // 查找对应的素材元素
+      const assetElement = assetListRef.current.querySelector(`[data-asset-id="${assetId}"]`);
+      if (assetElement) {
+        // 滚动到该元素
+        assetElement.scrollIntoView({ 
+          behavior: 'smooth', 
+          block: 'center' 
+        });
+        
+        // 高亮显示
+        setHighlightedAssetId(assetId);
+        
+        // 3秒后移除高亮
+        setTimeout(() => {
+          setHighlightedAssetId(null);
+        }, 3000);
+      }
+    } catch (error) {
+      console.error('滚动到素材时出错:', error);
+    }
+  }, []);
 
   // 高亮画布中的素材
   const highlightAssetOnCanvas = useCallback((assetId) => {
@@ -79,6 +109,13 @@ export default function IntegratedAssetSidebar({ editor, selectedFrame, setIsLoa
       // 静默处理错误
     }
   }, [editor]);
+
+  // 监听外部滚动请求
+  useEffect(() => {
+    if (onScrollToAsset && typeof onScrollToAsset === 'string') {
+      scrollToAsset(onScrollToAsset);
+    }
+  }, [onScrollToAsset, scrollToAsset]);
 
   // 更新资产列表 - 从当前页面的image形状反查资产（带去抖）
   const updateAssets = useCallback(() => {
@@ -249,16 +286,20 @@ export default function IntegratedAssetSidebar({ editor, selectedFrame, setIsLoa
       </div>
 
       {/* 素材预览区域 */}
-      <div style={sidebarStyles.list}>
+      <div ref={assetListRef} style={sidebarStyles.list}>
         {assets.map((a) => {
           const name = a?.props?.name || a?.props?.src?.split("/").slice(-1)[0] || a.id;
           const isUsed = usedAssetIds.has(a.id);
           return (
             <div 
               key={a.id} 
+              data-asset-id={a.id}
               style={{
                 ...sidebarStyles.card(isUsed),
-                cursor: 'grab'
+                cursor: 'grab',
+                background: highlightedAssetId === a.id ? "#fff3cd" : (isUsed ? "#e3f2fd" : "#fff"),
+                border: highlightedAssetId === a.id ? "2px solid #ffc107" : (isUsed ? "1px solid #2196f3" : "1px solid #e5e7eb"),
+                transition: "all 0.3s ease"
               }}
               draggable={true}
               onDragStart={(e) => {
@@ -337,7 +378,11 @@ export default function IntegratedAssetSidebar({ editor, selectedFrame, setIsLoa
               </div>
               <div>
                 <div title={name} style={sidebarStyles.name}>{name}</div>
-                <button style={sidebarStyles.btn} onClick={() => onPlace(a.id)}>放置到选中 Frame</button>
+                <BatchReplaceButton 
+                  editor={editor} 
+                  assetId={a.id} 
+                  assetName={name}
+                />
               </div>
             </div>
           );

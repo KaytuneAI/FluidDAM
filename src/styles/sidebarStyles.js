@@ -70,20 +70,55 @@ export const highlightStyle = `
   .asset-highlight::before {
     content: '';
     position: absolute;
-    top: -6px;
-    left: -6px;
-    right: -6px;
-    bottom: -6px;
-    border: 3px solid #ff0000;
-    border-radius: 6px;
+    top: -12px;
+    left: -12px;
+    right: -12px;
+    bottom: -12px;
+    border: 6px solid #ff4444;
+    border-radius: 12px;
     pointer-events: none;
     z-index: 1000;
-    animation: pulse 1s ease-in-out infinite alternate;
+    animation: pulse 1.2s ease-in-out infinite alternate;
+    box-shadow: 0 0 20px rgba(255, 68, 68, 0.8), 0 0 40px rgba(255, 68, 68, 0.4);
+  }
+  
+  .asset-highlight::after {
+    content: '';
+    position: absolute;
+    top: -18px;
+    left: -18px;
+    right: -18px;
+    bottom: -18px;
+    border: 3px solid #ff6666;
+    border-radius: 18px;
+    pointer-events: none;
+    z-index: 999;
+    animation: pulse-outer 1.5s ease-in-out infinite alternate;
+    opacity: 0.7;
   }
   
   @keyframes pulse {
-    0% { opacity: 0.6; transform: scale(1); }
-    100% { opacity: 1; transform: scale(1.05); }
+    0% { 
+      opacity: 0.8; 
+      transform: scale(1); 
+      box-shadow: 0 0 20px rgba(255, 68, 68, 0.8), 0 0 40px rgba(255, 68, 68, 0.4);
+    }
+    100% { 
+      opacity: 1; 
+      transform: scale(1.08); 
+      box-shadow: 0 0 30px rgba(255, 68, 68, 1), 0 0 60px rgba(255, 68, 68, 0.6);
+    }
+  }
+  
+  @keyframes pulse-outer {
+    0% { 
+      opacity: 0.5; 
+      transform: scale(1); 
+    }
+    100% { 
+      opacity: 0.8; 
+      transform: scale(1.12); 
+    }
   }
   
   @keyframes spin {
