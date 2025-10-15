@@ -5,6 +5,7 @@ import InsertImageButton from './InsertImageButton.jsx';
 import LoadCanvasButton from './LoadCanvasButton.jsx';
 import SaveCanvasButton from './SaveCanvasButton.jsx';
 import ShareCanvasButton from './ShareCanvasButton.jsx';
+import FormatBrushButton from './FormatBrushButton.jsx';
 
 export default function IntegratedAssetSidebar({ editor, selectedFrame, setIsLoading, platform = "TM", width, onReset, collapsed, onToggleCollapse }) {
   const [usedAssetIds, setUsedAssetIds] = useState(new Set());
@@ -221,6 +222,7 @@ export default function IntegratedAssetSidebar({ editor, selectedFrame, setIsLoa
           <LoadCanvasButton editor={editor} setIsLoading={setIsLoading} />
           <SaveCanvasButton editor={editor} />
           <ShareCanvasButton editor={editor} />
+          <FormatBrushButton editor={editor} />
           <button 
             onClick={onReset}
             style={{
