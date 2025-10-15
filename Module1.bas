@@ -31,6 +31,10 @@ Public Sub OpenDocs_OnAction(control As IRibbonControl)
     End If
 End Sub
 
+Public Sub ExportAllSheets_OnAction(control As IRibbonControl)
+    ExportAllSheets
+End Sub
+
 Public Sub About_OnAction(control As IRibbonControl)
     MsgBox "FluidDAM for Excel" & vbCrLf & _
            "Pro (Safe UI)" & vbCrLf & "? 2025 Kaytune", vbInformation, "关于"
@@ -98,6 +102,151 @@ FAIL:
     Application.ScreenUpdating = True
     MsgBox "Export failed: #" & Err.Number & " - " & Err.Description, vbExclamation, "Layout export"
 End Sub
+
+' ================= 一键导出所有工作表 =================
+Public Sub ExportAllSheets()
+    On Error GoTo FAIL
+    
+    Dim wb As Workbook
+    Set wb = ActiveWorkbook
+    
+    Application.ScreenUpdating = False
+    
+    Dim tgt As Worksheet
+    Set tgt = EnsureLayoutJsonSheet(wb)
+    
+    Dim ws As Worksheet
+    Dim exportCount As Long: exportCount = 0
+    Dim skipCount As Long: skipCount = 0
+    Dim totalCells As Long: totalCells = 0
+    Dim totalText As Long: totalText = 0
+    Dim totalPics As Long: totalPics = 0
+    Dim totalBorders As Long: totalBorders = 0
+    Dim skippedSheets As String: skippedSheets = ""
+    
+    ' 遍历所有工作表
+    For Each ws In wb.Worksheets
+        ' 跳过LayoutJson sheet本身
+        If ws.Name = tgt.Name Then
+            GoTo NextSheet
+        End If
+        
+        ' 检查工作表是否完全空白
+        If IsSheetEmpty(ws) Then
+            skipCount = skipCount + 1
+            If skippedSheets <> "" Then skippedSheets = skippedSheets & ", "
+            skippedSheets = skippedSheets & ws.Name
+            GoTo NextSheet
+        End If
+        
+        ' 导出当前工作表
+        On Error Resume Next
+        Dim outCells As Long, outText As Long, outPics As Long, outBorders As Long
+        Dim json As String
+        json = BuildSheetJson(ws, outCells, outText, outPics, outBorders)
+        
+        ' 如果BuildSheetJson失败，跳过该工作表
+        If Err.Number <> 0 Then
+            skipCount = skipCount + 1
+            If skippedSheets <> "" Then skippedSheets = skippedSheets & ", "
+            skippedSheets = skippedSheets & ws.Name & "(Error)"
+            Err.Clear
+            GoTo NextSheet
+        End If
+        On Error GoTo FAIL
+        
+        ' 找到目标行
+        Dim targetRow As Long
+        Dim isUpdate As Boolean
+        targetRow = FindSheetExportRow(tgt, ws.Name, isUpdate)
+        
+        ' 清除目标行
+        ClearRowContent tgt, targetRow
+        
+        ' 写入JSON（支持分割）
+        If Len(json) > 32000 Then
+            SplitJsonToCells tgt, json, targetRow
+        Else
+            tgt.Cells(targetRow, 1).Value2 = json
+        End If
+        
+        ' 累计统计
+        exportCount = exportCount + 1
+        totalCells = totalCells + outCells
+        totalText = totalText + outText
+        totalPics = totalPics + outPics
+        totalBorders = totalBorders + outBorders
+        
+NextSheet:
+    Next ws
+    
+    tgt.Columns("A").ColumnWidth = 120
+    Application.ScreenUpdating = True
+    
+    ' 显示结果
+    Dim msg As String
+    msg = "成功导出 " & exportCount & " 个工作表！" & vbCrLf & vbCrLf
+    msg = msg & "总计统计：" & vbCrLf
+    msg = msg & "- 单元格: " & totalCells & vbCrLf
+    msg = msg & "- 文本框: " & totalText & vbCrLf
+    msg = msg & "- 图片: " & totalPics & vbCrLf
+    msg = msg & "- 边框: " & totalBorders & vbCrLf
+    
+    If skipCount > 0 Then
+        msg = msg & vbCrLf & "跳过 " & skipCount & " 个工作表：" & vbCrLf
+        msg = msg & skippedSheets
+    End If
+    
+    MsgBox msg, vbInformation, "一键导出完成"
+    Exit Sub
+    
+FAIL:
+    Application.ScreenUpdating = True
+    MsgBox "批量导出失败: #" & Err.Number & " - " & Err.Description, vbExclamation, "一键导出所有工作表"
+End Sub
+
+' 检查工作表是否完全空白
+Private Function IsSheetEmpty(ByVal ws As Worksheet) As Boolean
+    On Error Resume Next
+    IsSheetEmpty = False
+    
+    ' 检查UsedRange
+    Dim ur As Range
+    Set ur = ws.UsedRange
+    
+    If ur Is Nothing Then
+        IsSheetEmpty = True
+        Exit Function
+    End If
+    
+    ' 检查UsedRange是否只有一个单元格且为空
+    If ur.Cells.Count = 1 And Trim(CStr(ur.Value2)) = "" Then
+        ' 进一步检查是否有图片或形状
+        If ws.Shapes.Count = 0 Then
+            IsSheetEmpty = True
+            Exit Function
+        End If
+    End If
+    
+    ' 如果UsedRange很小但都是空的，也认为是空白
+    If ur.Cells.Count <= 10 Then
+        Dim hasContent As Boolean: hasContent = False
+        Dim cell As Range
+        For Each cell In ur
+            If Trim(CStr(cell.Value2)) <> "" Then
+                hasContent = True
+                Exit For
+            End If
+        Next cell
+        
+        If Not hasContent And ws.Shapes.Count = 0 Then
+            IsSheetEmpty = True
+            Exit Function
+        End If
+    End If
+    
+    IsSheetEmpty = False
+End Function
 
 ' ================= 多工作表导出支持函数 =================
 ' 检测工作表是否已经导出过，返回目标行号和是否为更新操作
@@ -1290,10 +1439,25 @@ Private Function BordersToJson(ByVal ws As Worksheet, ByVal pt2px As Double, ByR
                 GoTo NextCell
             End If
             
-            ' 检查单元格是否有边框 - 使用精确检测
-            If HasCellBorderPrecise(representativeCell) Then
-                Debug.Print "BordersToJson: Found border at " & representativeCell.Address & " (count=" & borderCount & ")"
-                
+            ' 检查单元格是否需要边框：有背景色 或 有边框格式 或 是合并单元格
+            Dim needsBorder As Boolean
+            Dim hasFillColor As Boolean
+            Dim hasBorderInExcel As Boolean
+            Dim isMerged As Boolean
+            
+            ' 检查是否有背景色
+            hasFillColor = (GetCellFillColor(representativeCell) <> "#FFFFFF" And GetCellFillColor(representativeCell) <> "")
+            
+            ' 检查是否有边框格式
+            hasBorderInExcel = HasCellBorderPrecise(representativeCell)
+            
+            ' 检查是否为合并单元格
+            isMerged = representativeCell.MergeCells
+            
+            needsBorder = hasFillColor Or hasBorderInExcel Or isMerged
+            
+            ' 只为需要边框的单元格输出
+            If needsBorder Then
                 On Error Resume Next
                 If Not first Then sb = sb & "," Else first = False
                 
@@ -1301,14 +1465,24 @@ Private Function BordersToJson(ByVal ws As Worksheet, ByVal pt2px As Double, ByR
                 Dim mergeArea As Range
                 Set mergeArea = representativeCell.MergeArea
                 
-                ' 使用精确检测获取边框信息
+                ' 检测实际的边框状态
                 Dim hasTop As Boolean, hasBottom As Boolean, hasLeft As Boolean, hasRight As Boolean
-                hasTop = EdgeVisiblePrecise(representativeCell, xlEdgeTop)
-                hasBottom = EdgeVisiblePrecise(representativeCell, xlEdgeBottom)
-                hasLeft = EdgeVisiblePrecise(representativeCell, xlEdgeLeft)
-                hasRight = EdgeVisiblePrecise(representativeCell, xlEdgeRight)
                 
-                ' 构建精确的边框JSON
+                If hasBorderInExcel Then
+                    ' Excel中有明确的边框设置，使用精确检测
+                    hasTop = EdgeVisiblePrecise(representativeCell, xlEdgeTop)
+                    hasBottom = EdgeVisiblePrecise(representativeCell, xlEdgeBottom)
+                    hasLeft = EdgeVisiblePrecise(representativeCell, xlEdgeLeft)
+                    hasRight = EdgeVisiblePrecise(representativeCell, xlEdgeRight)
+                Else
+                    ' 有背景色或合并单元格但没有边框，默认四边都有
+                    hasTop = True
+                    hasBottom = True
+                    hasLeft = True
+                    hasRight = True
+                End If
+                
+                ' 构建边框JSON
                 sb = sb & "{""row"":" & r & ",""col"":" & c & ",""address"":""" & representativeCell.Address & """"
                 sb = sb & ",""x"":" & CNumD(mergeArea.Left * pt2px)
                 sb = sb & ",""y"":" & CNumD(mergeArea.Top * pt2px)
@@ -1323,13 +1497,6 @@ Private Function BordersToJson(ByVal ws As Worksheet, ByVal pt2px As Double, ByR
                 sb = sb & "}"
                 borderCount = borderCount + 1
                 
-                Debug.Print "BordersToJson: JSON so far length = " & Len(sb)
-                
-                ' 可选：限制输出数量（暂时注释掉，处理所有边框）
-                ' If borderCount >= 50 Then
-                '     Debug.Print "BordersToJson: Reached limit, exiting"
-                '     Exit For
-                ' End If
                 On Error GoTo EMPTY_RANGE
             End If
             

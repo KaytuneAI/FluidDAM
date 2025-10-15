@@ -529,98 +529,6 @@ export default function LoadCanvasButton({ editor, setIsLoading }) {
             };
             editor.createShape(cellBackgroundShape);
             
-            // 如果有边框，创建边框线条
-            if (hasBorder) {
-              const borderWidth = 0.5; // 减小到0.5像素，让边框更细
-              const borderColor = 'grey'; // 使用灰色而不是黑色，看起来更细
-              // 纯背景色格子使用点线边框，其他格子使用实线边框
-              const borderDash = isPureBackgroundCell ? 'dotted' : 'solid';
-              
-              // 创建上边框
-              const topBorderShape = {
-                type: 'geo',
-                x: x + inset,
-                y: y + inset,
-                props: {
-                  geo: 'rectangle',
-                  w: Math.max(0, w - inset * 2),
-                  h: borderWidth,
-                  fill: 'solid',
-                  color: borderColor,
-                  dash: borderDash,
-                  size: 's'
-                }
-              };
-              editor.createShape(topBorderShape);
-              
-              // 创建下边框
-              const bottomBorderShape = {
-                type: 'geo',
-                x: x + inset,
-                y: y + inset + Math.max(0, h - inset * 2) - borderWidth,
-                props: {
-                  geo: 'rectangle',
-                  w: Math.max(0, w - inset * 2),
-                  h: borderWidth,
-                  fill: 'solid',
-                  color: borderColor,
-                  dash: borderDash,
-                  size: 's'
-                }
-              };
-              editor.createShape(bottomBorderShape);
-              
-              // 创建左边框
-              const leftBorderShape = {
-                type: 'geo',
-                x: x + inset,
-                y: y + inset,
-                props: {
-                  geo: 'rectangle',
-                  w: borderWidth,
-                  h: Math.max(0, h - inset * 2),
-                  fill: 'solid',
-                  color: borderColor,
-                  dash: borderDash,
-                  size: 's'
-                }
-              };
-              editor.createShape(leftBorderShape);
-              
-              // 创建右边框
-              const rightBorderShape = {
-                type: 'geo',
-                x: x + inset + Math.max(0, w - inset * 2) - borderWidth,
-                y: y + inset,
-                props: {
-                  geo: 'rectangle',
-                  w: borderWidth,
-                  h: Math.max(0, h - inset * 2),
-                  fill: 'solid',
-                  color: borderColor,
-                  dash: borderDash,
-                  size: 's'
-                }
-              };
-              editor.createShape(rightBorderShape);
-            }
-            
-            console.log('✅ 创建单元格背景:', {
-              地址: cell.address || `${cell.r},${cell.c}`,
-              颜色: finalColor,
-              位置: { x: x + inset, y: y + inset },
-              尺寸: { w: Math.max(0, w - inset * 2), h: Math.max(0, h - inset * 2) },
-              有边框: hasBorder,
-              有文字: hasText,
-              纯背景色格子: isPureBackgroundCell,
-              边框样式: hasBorder ? (isPureBackgroundCell ? 'dotted' : 'solid') : '无边框'
-            });
-          } else {
-            console.log('⏭️ 跳过单元格背景:', {
-              地址: cell.address || `${cell.r},${cell.c}`,
-              颜色: finalColor,
-              原因: !hasVisibleFill(finalColor) ? '颜色太浅/白色' : '非代表单元格'
-            });
           }
           
         } catch (error) {
@@ -629,103 +537,100 @@ export default function LoadCanvasButton({ editor, setIsLoading }) {
       }
     }
     
-    // 4.5. 处理VBA输出的边框数组（新增功能）
+    // 4.5. 处理VBA输出的边框数组（优化版：避免重复边框）
     if (layoutData.sheet && layoutData.sheet.borders && layoutData.sheet.borders.length > 0) {
-      console.log('开始处理VBA输出的边框数组:', layoutData.sheet.borders.length);
+      // 策略：只画每个单元格的右边和下边，避免相邻单元格的边框重叠
+      // 第一行需要画上边，第一列需要画左边
+      
+      // 找出最小的row和col来判断是否是第一行/列
+      let minRow = Infinity, minCol = Infinity;
+      layoutData.sheet.borders.forEach(item => {
+        if (item.row < minRow) minRow = item.row;
+        if (item.col < minCol) minCol = item.col;
+      });
       
       for (const borderItem of layoutData.sheet.borders) {
         try {
-          // 验证边框数据
           const x = typeof borderItem.x === 'number' ? borderItem.x : 0;
           const y = typeof borderItem.y === 'number' ? borderItem.y : 0;
           const w = typeof borderItem.width === 'number' && borderItem.width > 0 ? borderItem.width : 50;
           const h = typeof borderItem.height === 'number' && borderItem.height > 0 ? borderItem.height : 20;
           
-          // 检查边框信息 - VBA可能只提供位置信息，没有详细的边框信息
           if (borderItem.borders) {
             const { top, right, bottom, left } = borderItem.borders;
+            const isFirstRow = borderItem.row === minRow;
+            const isFirstCol = borderItem.col === minCol;
             
-            // 根据边框信息创建相应的边框形状
-            if (top) {
-              const topBorderShape = {
+            // 第一行：画上边
+            if (isFirstRow && top) {
+              editor.createShape({
                 type: 'geo',
                 x: x,
                 y: y,
                 props: {
                   geo: 'rectangle',
                   w: w,
-                  h: 0.5, // 更细的线高度
+                  h: 0.5,
                   fill: 'solid',
-                  color: 'grey', // 使用灰色，看起来更细
+                  color: 'grey',
                   dash: 'solid',
                   size: 's'
                 }
-              };
-              editor.createShape(topBorderShape);
+              });
+            }
+            
+            // 第一列：画左边
+            if (isFirstCol && left) {
+              editor.createShape({
+                type: 'geo',
+                x: x,
+                y: y,
+                props: {
+                  geo: 'rectangle',
+                  w: 0.5,
+                  h: h,
+                  fill: 'solid',
+                  color: 'grey',
+                  dash: 'solid',
+                  size: 's'
+                }
+              });
+            }
+            
+            // 所有单元格：画右边和下边
+            if (right) {
+              editor.createShape({
+                type: 'geo',
+                x: x + w - 0.5,
+                y: y,
+                props: {
+                  geo: 'rectangle',
+                  w: 0.5,
+                  h: h,
+                  fill: 'solid',
+                  color: 'grey',
+                  dash: 'solid',
+                  size: 's'
+                }
+              });
             }
             
             if (bottom) {
-              const bottomBorderShape = {
+              editor.createShape({
                 type: 'geo',
                 x: x,
                 y: y + h - 0.5,
                 props: {
                   geo: 'rectangle',
                   w: w,
-                  h: 0.5, // 更细的线高度
+                  h: 0.5,
                   fill: 'solid',
-                  color: 'grey', // 使用灰色，看起来更细
+                  color: 'grey',
                   dash: 'solid',
                   size: 's'
                 }
-              };
-              editor.createShape(bottomBorderShape);
+              });
             }
-            
-            if (left) {
-              const leftBorderShape = {
-                type: 'geo',
-                x: x,
-                y: y,
-                props: {
-                  geo: 'rectangle',
-                  w: 0.5, // 更细的线宽度
-                  h: h,
-                  fill: 'solid',
-                  color: 'grey', // 使用灰色，看起来更细
-                  dash: 'solid',
-                  size: 's'
-                }
-              };
-              editor.createShape(leftBorderShape);
-            }
-            
-            if (right) {
-              const rightBorderShape = {
-                type: 'geo',
-                x: x + w - 0.5,
-                y: y,
-                props: {
-                  geo: 'rectangle',
-                  w: 0.5, // 更细的线宽度
-                  h: h,
-                  fill: 'solid',
-                  color: 'grey', // 使用灰色，看起来更细
-                  dash: 'solid',
-                  size: 's'
-                }
-              };
-              editor.createShape(rightBorderShape);
-            }
-            
-            console.log('✅ 创建边框:', {
-              address: borderItem.address || `${borderItem.row},${borderItem.col}`,
-              borders: { top, right, bottom, left },
-              position: { x, y, w, h }
-            });
-          } else {
-            // 禁用默认边框逻辑 - 如果VBA没有提供边框详细信息，则不绘制任何边框
-            console.log('⏭️ VBA未提供边框详细信息，跳过边框绘制:', borderItem.address);
           }
         } catch (error) {
           console.warn('创建边框失败:', borderItem, error);
