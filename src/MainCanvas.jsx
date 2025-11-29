@@ -1,5 +1,5 @@
 import React, { useMemo, useRef, useState, useEffect, useCallback } from "react";
-import { Tldraw, createTLStore, defaultShapeUtils, getSnapshot, createTLStore as createStore, loadSnapshot } from "tldraw";
+import { Tldraw, createTLStore, defaultShapeUtils, getSnapshot, loadSnapshot } from "tldraw";
 import "tldraw/tldraw.css";
 import { getApiBaseUrl } from './utils/apiUtils.js';
 import storageManager from './utils/storageManager.js';
@@ -88,6 +88,10 @@ export default function MainCanvas() {
   const [isLoading, setIsLoading] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(280);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [stylePanelCollapsed, setStylePanelCollapsed] = useState(false);
+  const [buttonPosition, setButtonPosition] = useState({ bottom: 10, left: 'auto', right: 10 });
+  const [savedButtonLeft, setSavedButtonLeft] = useState(null); // 保存展开时的左右位置
+  const [savedPanelWidth, setSavedPanelWidth] = useState(200); // 保存编辑框宽度
   const [dragOver, setDragOver] = useState(false);
   const [scrollToAssetId, setScrollToAssetId] = useState(null);
   // 移除保存状态指示器，不再显示任何提示
@@ -658,19 +662,21 @@ export default function MainCanvas() {
     
     // 监听多种页面关闭事件
     window.addEventListener('beforeunload', handleBeforeUnload);
-    window.addEventListener('unload', handleBeforeUnload);
+    // 移除 unload 事件监听器（已废弃）
+    // window.addEventListener('unload', handleBeforeUnload);
     
     // 监听页面隐藏事件（移动端、切换标签页等）
-    document.addEventListener('visibilitychange', () => {
+    const handleVisibilityChange = () => {
       if (document.hidden && editorRef.current) {
         handleBeforeUnload({ type: 'visibilitychange' });
       }
-    });
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
     
     return () => {
       window.removeEventListener('beforeunload', handleBeforeUnload);
-      window.removeEventListener('unload', handleBeforeUnload);
-      document.removeEventListener('visibilitychange', handleBeforeUnload);
+      // window.removeEventListener('unload', handleBeforeUnload);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, []);
 
@@ -1268,11 +1274,261 @@ export default function MainCanvas() {
     };
   }, []);
 
+  // 动态更新按钮位置：贴在样式面板底部，或画布顶部
+  useEffect(() => {
+    if (!editorReady) return;
+    
+    const updateButtonPosition = () => {
+      // 查找样式面板
+      const stylePanelSelectors = [
+        '.tlui-style-panel',
+        '.tlui-panel',
+        '[data-testid="style-panel"]',
+        '.tlui-menu-panel'
+      ];
+      
+      let foundPanel = null;
+      for (const selector of stylePanelSelectors) {
+        try {
+          const panels = document.querySelectorAll(selector);
+          for (const panel of panels) {
+            const rect = panel.getBoundingClientRect();
+            const computedStyle = window.getComputedStyle(panel);
+            const isVisible = rect.width > 0 && rect.height > 0 && 
+                             computedStyle.display !== 'none' &&
+                             computedStyle.visibility !== 'hidden' &&
+                             computedStyle.opacity !== '0';
+            if (isVisible && rect.left > window.innerWidth * 0.5) {
+              foundPanel = panel;
+              break;
+            }
+          }
+          if (foundPanel) break;
+        } catch (e) {}
+      }
+      
+      if (foundPanel && !stylePanelCollapsed) {
+        // 样式面板存在且可见，按钮贴在面板底部
+        const rect = foundPanel.getBoundingClientRect();
+        const buttonWidth = 40;
+        const panelWidth = rect.width; // 编辑框宽度
+        setSavedPanelWidth(panelWidth); // 保存编辑框宽度
+        
+        // 计算可用区域的右边界
+        const availableRightEdge = sidebarCollapsed 
+          ? window.innerWidth  // 右边栏收起，可用到窗口最右面
+          : window.innerWidth - sidebarWidth; // 右边栏展开，减去右边栏宽度
+        
+        // 按钮距离右边缘 = 1/2 编辑框宽度
+        const offsetFromRight = panelWidth / 2;
+        const leftPos = availableRightEdge - buttonWidth - offsetFromRight;
+        
+        setSavedButtonLeft(leftPos); // 保存左右位置
+        
+        setButtonPosition({
+          top: rect.bottom, // 按钮上边框贴着编辑框下边框
+          left: leftPos,
+          right: 'auto',
+          bottom: 'auto',
+          transform: 'none'
+        });
+      } else {
+        // 样式面板不存在或已折叠，按钮在画布顶部
+        const buttonWidth = 40;
+        
+        // 计算可用区域的右边界
+        const availableRightEdge = sidebarCollapsed 
+          ? window.innerWidth  // 右边栏收起，可用到窗口最右面
+          : window.innerWidth - sidebarWidth; // 右边栏展开，减去右边栏宽度
+        
+        // 使用保存的编辑框宽度
+        const panelWidth = savedPanelWidth;
+        
+        // 按钮距离右边缘 = 1/2 编辑框宽度
+        const offsetFromRight = panelWidth / 2;
+        const leftPos = availableRightEdge - buttonWidth - offsetFromRight;
+        
+        setButtonPosition({
+          bottom: 'auto',
+          top: 0, // 按钮上边框贴着画布上边框
+          left: leftPos,
+          right: 'auto',
+          transform: 'none'
+        });
+      }
+    };
+    
+    updateButtonPosition();
+    const interval = setInterval(updateButtonPosition, 500);
+    
+    // 监听窗口大小变化
+    window.addEventListener('resize', updateButtonPosition);
+    
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('resize', updateButtonPosition);
+    };
+  }, [editorReady, stylePanelCollapsed, sidebarCollapsed, sidebarWidth]);
+
+  // 控制 TLDraw 样式面板的显示/隐藏
+  useEffect(() => {
+    if (!editorReady) return;
+    
+    const toggleStylePanel = () => {
+      // 方法1: 查找所有可能的样式面板选择器
+      const stylePanelSelectors = [
+        '.tlui-style-panel',
+        '.tlui-panel',
+        '[data-testid="style-panel"]',
+        '.tlui-menu-panel',
+        '.tlui-color-panel',
+        '.tlui-stroke-style-panel',
+        '.tlui-fill-style-panel',
+        '[class*="tlui"][class*="panel"]',
+        '[class*="tlui"][class*="style"]'
+      ];
+      
+      const foundPanels = new Set();
+      
+      stylePanelSelectors.forEach(selector => {
+        try {
+          const panels = document.querySelectorAll(selector);
+          panels.forEach(panel => {
+            foundPanels.add(panel);
+          });
+        } catch (e) {
+          // 忽略无效选择器
+        }
+      });
+      
+      // 方法2: 查找包含颜色选择器、滑块、尺寸按钮的元素（这些通常在样式面板中）
+      const validSelectors = [
+        '[class*="color"]',
+        '[class*="palette"]',
+        '[class*="swatch"]',
+        '[class*="stroke"]',
+        '[class*="fill"]',
+        '[class*="size"]',
+        'input[type="range"]' // 滑块
+      ];
+      
+      validSelectors.forEach(selector => {
+        try {
+          const elements = document.querySelectorAll(selector);
+          elements.forEach(el => {
+            const rect = el.getBoundingClientRect();
+            // 检查是否在右侧区域（TLDraw 样式面板通常在右侧）
+            const isRightSide = rect.left > window.innerWidth * 0.5;
+            
+            if (isRightSide) {
+              // 向上查找包含这些元素的父面板
+              let parent = el.parentElement;
+              let depth = 0;
+              while (parent && depth < 10) {
+                const parentClass = parent.className || '';
+                if (typeof parentClass === 'string' && (
+                  parentClass.includes('panel') || 
+                  parentClass.includes('tlui') ||
+                  parentClass.includes('menu')
+                )) {
+                  foundPanels.add(parent);
+                  break;
+                }
+                parent = parent.parentElement;
+                depth++;
+              }
+            }
+          });
+        } catch (e) {
+          // 忽略无效选择器
+        }
+      });
+      
+      // 方法3: 查找包含 S/M/L/XL 文本的按钮
+      try {
+        const allButtons = document.querySelectorAll('button');
+        allButtons.forEach(button => {
+          const text = button.textContent?.trim() || '';
+          if (['S', 'M', 'L', 'XL'].includes(text)) {
+            const rect = button.getBoundingClientRect();
+            const isRightSide = rect.left > window.innerWidth * 0.5;
+            
+            if (isRightSide) {
+              let parent = button.parentElement;
+              let depth = 0;
+              while (parent && depth < 10) {
+                const parentClass = parent.className || '';
+                if (typeof parentClass === 'string' && (
+                  parentClass.includes('panel') || 
+                  parentClass.includes('tlui') ||
+                  parentClass.includes('menu')
+                )) {
+                  foundPanels.add(parent);
+                  break;
+                }
+                parent = parent.parentElement;
+                depth++;
+              }
+            }
+          }
+        });
+      } catch (e) {
+        // 忽略错误
+      }
+      
+      // 应用显示/隐藏
+      foundPanels.forEach(panel => {
+        if (stylePanelCollapsed) {
+          panel.style.display = 'none';
+          panel.style.visibility = 'hidden';
+          panel.style.opacity = '0';
+          panel.style.height = '0';
+          panel.style.overflow = 'hidden';
+          panel.style.pointerEvents = 'none';
+        } else {
+          panel.style.display = '';
+          panel.style.visibility = '';
+          panel.style.opacity = '';
+          panel.style.height = '';
+          panel.style.overflow = '';
+          panel.style.pointerEvents = '';
+        }
+      });
+    };
+    
+    // 延迟执行，确保 TLDraw UI 已渲染
+    const timer = setTimeout(toggleStylePanel, 500);
+    
+    // 使用 MutationObserver 监听 DOM 变化
+    const observer = new MutationObserver(() => {
+      toggleStylePanel();
+    });
+    
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['class', 'style']
+    });
+    
+    // 定期检查（备用方案）
+    const interval = setInterval(toggleStylePanel, 1000);
+    
+    return () => {
+      clearTimeout(timer);
+      clearInterval(interval);
+      observer.disconnect();
+    };
+  }, [editorReady, stylePanelCollapsed]);
+
   return (
     <div style={{ width: "100vw", height: "100vh", position: "relative", display: "flex" }}>
       {/* 左侧画布区域 */}
       <div 
-        style={{ flex: 1, position: "relative" }}
+        style={{ 
+          flex: 1, 
+          position: "relative"
+        }}
         onDragOver={(e) => {
           console.log('画布区域拖拽进入');
           e.preventDefault();
@@ -1394,9 +1650,9 @@ export default function MainCanvas() {
         </div>
       ) : (
         <Tldraw
-          key={forceRerender} // 强制重新渲染
-          store={store}
-          onMount={(editor) => {
+            key={forceRerender} // 强制重新渲染
+            store={store}
+            onMount={(editor) => {
           editorRef.current = editor;
           setEditorReady(true);
           
@@ -1460,6 +1716,53 @@ export default function MainCanvas() {
       )}
       
       {/* 保存状态指示器已移除 */}
+
+      {/* 样式面板折叠/展开按钮 */}
+      {editorReady && (
+        <div
+          style={{
+            position: 'fixed',
+            ...buttonPosition,
+            width: 40, // 展开和收起时都是40
+            height: 20, // 展开和收起时都是20
+            background: '#ffffff',
+            border: '1px solid #d1d5db', // 展开和收起时都是黑色边框
+            borderRadius: '4px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            transition: 'all 0.3s ease',
+            zIndex: 10000,
+            boxShadow: '0 1px 4px rgba(0,0,0,0.12)'
+          }}
+          onClick={() => setStylePanelCollapsed(!stylePanelCollapsed)}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = '#f3f4f6';
+            e.currentTarget.style.borderColor = '#9ca3af';
+            e.currentTarget.style.boxShadow = '0 2px 6px rgba(0,0,0,0.18)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = '#ffffff';
+            e.currentTarget.style.borderColor = '#d1d5db';
+            e.currentTarget.style.boxShadow = '0 1px 4px rgba(0,0,0,0.12)';
+          }}
+          title={stylePanelCollapsed ? "展开样式面板" : "收起样式面板"}
+        >
+          <div
+            style={{
+              width: 0,
+              height: 0,
+              borderStyle: 'solid',
+              borderWidth: stylePanelCollapsed ? '5px 4px 0 4px' : '0 4px 5px 4px',
+              borderColor: stylePanelCollapsed 
+                ? `#4b5563 transparent transparent transparent`
+                : `transparent transparent #4b5563 transparent`,
+              transition: 'all 0.2s ease-in-out'
+            }}
+          />
+        </div>
+      )}
 
       {/* 拖拽提示覆盖层 */}
       {dragOver && (
