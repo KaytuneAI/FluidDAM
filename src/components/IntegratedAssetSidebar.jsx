@@ -221,36 +221,23 @@ export default function IntegratedAssetSidebar({ editor, selectedFrame, setIsLoa
         flexDirection: "column",
         gap: 8
       }}>
+        {/* Logo 区域 */}
         <div style={{
           display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center"
+          justifyContent: "center",
+          alignItems: "center",
+          marginBottom: 4
         }}>
-          <div style={{fontWeight: 600, fontSize: 14}}>素材管理</div>
-          <button 
-            onClick={onToggleCollapse}
+          <img 
+            src="/image/kaytuneai logo.png" 
+            alt="Kaytune AI Logo" 
             style={{
-              fontSize: 12,
-              padding: "4px 8px",
-              border: "1px solid #d1d5db",
-              borderRadius: 4,
-              background: "#fff",
-              cursor: "pointer",
-              color: "#6b7280",
-              transition: "all 0.2s"
+              maxWidth: "100%",
+              height: "auto",
+              maxHeight: "40px",
+              objectFit: "contain"
             }}
-            onMouseEnter={(e) => {
-              e.target.style.background = "#f3f4f6";
-              e.target.style.borderColor = "#9ca3af";
-            }}
-            onMouseLeave={(e) => {
-              e.target.style.background = "#fff";
-              e.target.style.borderColor = "#d1d5db";
-            }}
-            title="收起面板"
-          >
-            ←
-          </button>
+          />
         </div>
         <div style={{
           display: 'flex', 

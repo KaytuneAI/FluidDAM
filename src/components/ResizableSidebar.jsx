@@ -94,7 +94,7 @@ export default function ResizableSidebar({ children, width, onWidthChange, colla
             borderStyle: 'solid',
             borderWidth: '6px 0 6px 8px',
             borderColor: `transparent transparent transparent ${collapsed ? '#6c757d' : '#6c757d'}`,
-            transform: collapsed ? 'rotate(0deg)' : 'rotate(180deg)',
+            transform: collapsed ? 'rotate(180deg)' : 'rotate(0deg)',
             transition: 'transform 0.2s ease-in-out'
           }}
         />
