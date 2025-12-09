@@ -16,7 +16,33 @@ export default defineConfig({
     chunkSizeWarningLimit: 2000, // 放宽限制
     rollupOptions: {
       output: {
-        manualChunks: undefined // 禁用chunk分割，确保React正常工作
+        manualChunks: (id) => {
+          // 将 node_modules 中的大依赖包单独打包
+          if (id.includes('node_modules')) {
+            // tldraw 单独打包（最大的依赖）
+            if (id.includes('tldraw')) {
+              return 'tldraw';
+            }
+            // ExcelJS 相关库单独打包
+            if (id.includes('exceljs')) {
+              return 'exceljs';
+            }
+            // JSZip 单独打包
+            if (id.includes('jszip')) {
+              return 'jszip';
+            }
+            // XML解析器单独打包
+            if (id.includes('fast-xml-parser')) {
+              return 'xml-parser';
+            }
+            // React 相关库单独打包
+            if (id.includes('react') || id.includes('react-dom') || id.includes('scheduler')) {
+              return 'react-vendor';
+            }
+            // 其他 node_modules 中的库
+            return 'vendor';
+          }
+        }
       },
     },
   },

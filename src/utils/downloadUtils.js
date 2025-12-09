@@ -30,7 +30,9 @@ export function detectBrowser() {
  */
 export function downloadFile(blob, fileName, onSuccess = null, onError = null) {
   try {
+    console.log('📥 downloadFile: 开始下载，文件名:', fileName, '大小:', blob.size, '字节');
     const browser = detectBrowser();
+    console.log('🌐 检测到浏览器:', browser);
     
     // 旧版IE浏览器
     if (browser === 'ie' && window.navigator.msSaveBlob) {
@@ -41,6 +43,8 @@ export function downloadFile(blob, fileName, onSuccess = null, onError = null) {
     
     // 现代浏览器
     const url = URL.createObjectURL(blob);
+    console.log('🔗 创建对象URL:', url);
+    
     const a = document.createElement('a');
     a.href = url;
     a.download = fileName;
@@ -48,19 +52,23 @@ export function downloadFile(blob, fileName, onSuccess = null, onError = null) {
     
     // 添加到DOM
     document.body.appendChild(a);
+    console.log('✅ 下载链接已添加到DOM');
     
     // 设置成功回调
     const handleSuccess = () => {
+      console.log('✅ 下载成功回调触发');
       if (onSuccess) onSuccess(fileName);
     };
     
     // 设置错误回调
     const handleError = (error) => {
+      console.error('❌ 下载错误回调触发:', error);
       if (onError) onError(error);
     };
     
     if (browser === 'edge' || browser === 'firefox') {
       // Edge和Firefox - 直接触发下载，立即成功
+      console.log('🖱️ Edge/Firefox: 触发点击事件');
       const event = new MouseEvent('click', {
         view: window,
         bubbles: true,
@@ -72,26 +80,39 @@ export function downloadFile(blob, fileName, onSuccess = null, onError = null) {
       setTimeout(handleSuccess, 200);
     } else if (browser === 'chrome' || browser === 'safari') {
       // Chrome和Safari - 会弹出保存对话框，需要等待用户操作
+      console.log('🖱️ Chrome/Safari: 触发点击事件');
       a.click();
       
-      // 对于Chrome和Safari，我们不自动显示通知
-      // 让用户通过浏览器的保存对话框完成操作
-      // 这样可以避免重复提示
+      // 对于Chrome和Safari，不自动显示成功通知
+      // 因为用户需要通过浏览器的保存对话框完成操作
+      // 如果用户取消了对话框，我们不应该显示成功消息
+      // 所以这里不调用 handleSuccess，让浏览器自己处理
+      // 如果需要，可以监听下载完成事件，但这不是必需的
     } else {
       // 其他浏览器
+      console.log('🖱️ 其他浏览器: 触发点击事件');
       a.click();
       setTimeout(handleSuccess, 200);
     }
     
     // 清理
     setTimeout(() => {
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    }, 100);
+      try {
+        if (document.body.contains(a)) {
+          document.body.removeChild(a);
+        }
+        URL.revokeObjectURL(url);
+        console.log('🧹 已清理下载链接');
+      } catch (cleanupError) {
+        console.warn('清理下载链接时出错:', cleanupError);
+      }
+    }, 1000);
     
+    console.log('✅ downloadFile: 函数执行完成');
     return true;
   } catch (error) {
-    console.error('文件下载失败:', error);
+    console.error('❌ downloadFile: 文件下载失败:', error);
+    console.error('错误堆栈:', error.stack);
     if (onError) onError(error);
     return false;
   }
@@ -105,11 +126,25 @@ export function downloadFile(blob, fileName, onSuccess = null, onError = null) {
  * @param {Function} onError - 下载失败回调
  */
 export function downloadJSON(data, fileName, onSuccess = null, onError = null) {
-  const jsonString = JSON.stringify(data, null, 2);
-  const blob = new Blob([jsonString], { type: 'application/json' });
-  const fullFileName = fileName.endsWith('.json') ? fileName : `${fileName}.json`;
-  
-  return downloadFile(blob, fullFileName, onSuccess, onError);
+  try {
+    console.log('📦 downloadJSON: 开始序列化数据...');
+    const jsonString = JSON.stringify(data, null, 2);
+    console.log('✅ downloadJSON: 数据序列化完成，大小:', jsonString.length, '字节');
+    
+    const blob = new Blob([jsonString], { type: 'application/json' });
+    const fullFileName = fileName.endsWith('.json') ? fileName : `${fileName}.json`;
+    
+    console.log('📥 downloadJSON: 准备下载文件:', fullFileName);
+    const result = downloadFile(blob, fullFileName, onSuccess, onError);
+    console.log('✅ downloadJSON: downloadFile调用完成，返回值:', result);
+    return result;
+  } catch (error) {
+    console.error('❌ downloadJSON: 发生错误:', error);
+    if (onError) {
+      onError(error);
+    }
+    throw error;
+  }
 }
 
 /**

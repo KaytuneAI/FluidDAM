@@ -6,58 +6,29 @@ import { compressTo96DPI } from '../utils/dpiCompression.js';
 
 export default function SaveCanvasButton({ editor }) {
   const saveCanvas = async () => {
+    console.log('🔄 保存画布按钮被点击');
+    
     if (!editor) {
+      console.error('❌ Editor未初始化');
+      alert('画布未初始化，请刷新页面重试');
       return;
     }
 
     try {
+      console.log('📦 开始保存流程...');
       
       // 获取当前画布的所有形状
       const currentShapes = editor.getCurrentPageShapes();
       const imageShapes = currentShapes.filter(shape => shape.type === 'image');
+      console.log(`📊 当前画布: ${currentShapes.length} 个形状, ${imageShapes.length} 张图片`);
       
       // 导出画布状态（包含完整的图片数据）
       let canvasData = getSnapshot(editor.store);
+      console.log('✅ 已获取画布快照');
       
-      // 在保存时压缩图片（Edge浏览器兼容性修复）
-      if (canvasData && canvasData.store && canvasData.store.assets) {
-        console.log('开始压缩保存文件中的图片...');
-        const assets = canvasData.store.assets;
-        let compressedCount = 0;
-        
-        // 遍历所有资产，压缩图片类型
-        for (const [assetId, asset] of Object.entries(assets)) {
-          if (asset && asset.typeName === 'asset' && asset.type === 'image' && asset.props && asset.props.src) {
-            try {
-              const src = asset.props.src;
-              // 检查是否是base64格式的图片
-              if (src.startsWith('data:image/')) {
-                const [mimeTypePart, base64Data] = src.split(',');
-                const mimeType = mimeTypePart.match(/data:image\/([^;]+)/)?.[1] || 'png';
-                const fullMimeType = `image/${mimeType}`;
-                
-                // 压缩图片
-                try {
-                  const compressedBase64 = await compressTo96DPI(base64Data, fullMimeType, 96);
-                  // 更新资产中的图片数据
-                  asset.props.src = `data:image/${mimeType};base64,${compressedBase64}`;
-                  compressedCount++;
-                  console.log(`✅ 已压缩图片资产: ${assetId}`);
-                } catch (compressionError) {
-                  console.warn(`⚠️ 压缩图片资产 ${assetId} 失败:`, compressionError);
-                  // 压缩失败时继续使用原始图片
-                }
-              }
-            } catch (error) {
-              console.warn(`处理图片资产 ${assetId} 时出错:`, error);
-            }
-          }
-        }
-        
-        if (compressedCount > 0) {
-          console.log(`✅ 保存时已压缩 ${compressedCount} 张图片（Edge浏览器兼容性优化）`);
-        }
-      }
+      // 暂时禁用图片压缩，先确保基本保存功能正常
+      // 图片压缩可以在后台异步进行，不阻塞保存流程
+      // TODO: 后续可以添加可选的压缩选项
       
       // 获取图片信息
       const imageInfo = [];
@@ -92,43 +63,56 @@ export default function SaveCanvasButton({ editor }) {
           });
           
         } catch (error) {
-          // 处理图片信息失败，静默处理
+          console.warn('处理图片信息时出错:', error);
         }
       }
       
       // 获取当前页面ID
       const currentPageId = editor.getCurrentPageId();
-      console.log('保存时的当前页面ID:', currentPageId);
+      console.log('📄 当前页面ID:', currentPageId);
       
       // 创建保存文件的内容
       const saveData = {
         version: '1.0',
         savedAt: new Date().toISOString(),
         canvasData: canvasData,
-        currentPageId: currentPageId, // 保存当前页面ID
+        currentPageId: currentPageId,
         imageInfo: imageInfo,
         totalImages: imageInfo.length
       };
       
+      console.log('📝 保存数据已准备，大小:', JSON.stringify(saveData).length, '字节');
       
       // 使用统一的下载工具
       const fileName = `canvas_${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}`;
+      console.log('💾 准备下载文件:', fileName);
       
       // 定义成功和失败回调
       const onDownloadSuccess = (fileName) => {
+        console.log('✅ 文件下载成功:', fileName);
         showDownloadNotification(fileName, true);
       };
       
       const onDownloadError = (error) => {
+        console.error('❌ 文件下载失败:', error);
         showDownloadNotification(fileName, false);
-        console.error('下载失败:', error);
+        alert('文件下载失败，请检查浏览器下载设置或查看控制台');
       };
       
-      // 开始下载，只有Edge/Firefox等会立即显示通知
-      downloadJSON(saveData, fileName, onDownloadSuccess, onDownloadError);
+      // 开始下载
+      console.log('🚀 开始触发下载...');
+      try {
+        downloadJSON(saveData, fileName, onDownloadSuccess, onDownloadError);
+        console.log('✅ 下载函数已调用');
+      } catch (downloadError) {
+        console.error('❌ 调用下载函数时出错:', downloadError);
+        throw downloadError;
+      }
       
     } catch (error) {
-      alert('保存失败，请重试');
+      console.error('❌ 保存画布时发生错误:', error);
+      console.error('错误堆栈:', error.stack);
+      alert('保存失败: ' + (error.message || '未知错误，请查看控制台获取详细信息'));
     }
   };
 
