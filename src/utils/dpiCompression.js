@@ -84,8 +84,26 @@ export async function compressTo96DPI(base64String, mimeType = 'image/png', targ
           // 绘制压缩后的图片
           ctx.drawImage(img, 0, 0, newWidth, newHeight);
           
-          // 转换为Base64，使用高质量设置
-          const compressedBase64 = canvas.toDataURL(mimeType, 0.9).split(',')[1];
+          // Edge浏览器兼容性修复：PNG格式不支持quality参数
+          // 对于PNG格式，转换为JPEG以支持压缩；对于JPEG/WebP，使用quality参数
+          let outputMimeType = mimeType;
+          let quality = 0.9;
+          
+          // 如果原始格式是PNG，转换为JPEG以支持压缩（Edge浏览器兼容性）
+          if (mimeType === 'image/png' || mimeType === 'image/png;base64') {
+            outputMimeType = 'image/jpeg';
+            quality = 0.85; // JPEG使用0.85质量，在文件大小和质量之间平衡
+          }
+          
+          // 转换为Base64，根据格式使用相应的参数
+          let compressedBase64;
+          if (outputMimeType === 'image/jpeg' || outputMimeType === 'image/webp') {
+            // JPEG和WebP支持quality参数
+            compressedBase64 = canvas.toDataURL(outputMimeType, quality).split(',')[1];
+          } else {
+            // PNG等其他格式不支持quality参数
+            compressedBase64 = canvas.toDataURL(outputMimeType).split(',')[1];
+          }
           
           resolve(compressedBase64);
         } catch (error) {

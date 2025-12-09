@@ -2,6 +2,7 @@ import React from "react";
 import { getSnapshot } from "tldraw";
 import { downloadJSON, showDownloadNotification } from '../utils/downloadUtils.js';
 import { getImageData } from '../utils/apiUtils.js';
+import { compressTo96DPI } from '../utils/dpiCompression.js';
 
 export default function SaveCanvasButton({ editor }) {
   const saveCanvas = async () => {
@@ -14,6 +15,49 @@ export default function SaveCanvasButton({ editor }) {
       // 获取当前画布的所有形状
       const currentShapes = editor.getCurrentPageShapes();
       const imageShapes = currentShapes.filter(shape => shape.type === 'image');
+      
+      // 导出画布状态（包含完整的图片数据）
+      let canvasData = getSnapshot(editor.store);
+      
+      // 在保存时压缩图片（Edge浏览器兼容性修复）
+      if (canvasData && canvasData.store && canvasData.store.assets) {
+        console.log('开始压缩保存文件中的图片...');
+        const assets = canvasData.store.assets;
+        let compressedCount = 0;
+        
+        // 遍历所有资产，压缩图片类型
+        for (const [assetId, asset] of Object.entries(assets)) {
+          if (asset && asset.typeName === 'asset' && asset.type === 'image' && asset.props && asset.props.src) {
+            try {
+              const src = asset.props.src;
+              // 检查是否是base64格式的图片
+              if (src.startsWith('data:image/')) {
+                const [mimeTypePart, base64Data] = src.split(',');
+                const mimeType = mimeTypePart.match(/data:image\/([^;]+)/)?.[1] || 'png';
+                const fullMimeType = `image/${mimeType}`;
+                
+                // 压缩图片
+                try {
+                  const compressedBase64 = await compressTo96DPI(base64Data, fullMimeType, 96);
+                  // 更新资产中的图片数据
+                  asset.props.src = `data:image/${mimeType};base64,${compressedBase64}`;
+                  compressedCount++;
+                  console.log(`✅ 已压缩图片资产: ${assetId}`);
+                } catch (compressionError) {
+                  console.warn(`⚠️ 压缩图片资产 ${assetId} 失败:`, compressionError);
+                  // 压缩失败时继续使用原始图片
+                }
+              }
+            } catch (error) {
+              console.warn(`处理图片资产 ${assetId} 时出错:`, error);
+            }
+          }
+        }
+        
+        if (compressedCount > 0) {
+          console.log(`✅ 保存时已压缩 ${compressedCount} 张图片（Edge浏览器兼容性优化）`);
+        }
+      }
       
       // 获取图片信息
       const imageInfo = [];
@@ -51,9 +95,6 @@ export default function SaveCanvasButton({ editor }) {
           // 处理图片信息失败，静默处理
         }
       }
-      
-      // 导出画布状态（包含完整的图片数据）
-      const canvasData = getSnapshot(editor.store);
       
       // 获取当前页面ID
       const currentPageId = editor.getCurrentPageId();
